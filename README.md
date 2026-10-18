@@ -28,3 +28,8 @@ v1 **不带资源包**（`compile.pck: false`）。要加 `.pck` 需要先打通
 | `install_mod` | 复制到游戏的 mods 目录，并报告加载总开关的状态 |
 
 路径与判据都在 `.pi/lib/`；`mod-repo.json` 只放常量。
+
+## 第三方组件
+
+`tools/` 下有入库的第三方二进制（随仓的反编译器）。清单、版本与 MIT 许可全文见
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)。这三个文件与上游字节相同，不得改动。
