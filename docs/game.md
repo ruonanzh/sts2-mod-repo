@@ -108,3 +108,11 @@ mac 有两份数据目录（`data_sts2_macos_arm64` / `data_sts2_macos_x86_64`�
 - 池归属用 `[Pool(typeof(IroncladCardPool))]`。
 - 版本对应：BaseLib 3.3.0+ 配游戏 0.107；本机装的是 0.107.1。
 - 本地化：`localization/<lang>/{cards,relics,powers,characters,ancients,card_keywords,static_hover_tips}.json`，键 `MODID-MODEL_ID.title` / `.description`。
+
+## 8. 用 fetch 查名字的边界
+
+`inspect_game_api` 读的是**游戏自带的** `sts2.dll`（6381 个类型）。所以：
+
+- 游戏自己的类型都能查到并反编译。
+- **BaseLib 的类型查不到**（`CustomCardModel` 等），因为 BaseLib 是一个 mod，不在游戏目录里。要用它，读 BaseLib 的源码或 wiki。
+- `sts2.xml` 只是 `<summary>` 注释的集合（19635 条），**没有注释的成员不在里面**。例如 `CardModel.PortraitPath` 就没有文档，只能靠反编译看。所以查成员名字一律用 `action=source` 读类型源码。
