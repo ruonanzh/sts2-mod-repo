@@ -13,9 +13,9 @@ using ICSharpCode.Decompiler.TypeSystem;
 
 static class ApiProbe
 {
-    // `--dll *` = Managed 目录下所有**非框架** DLL（框架由下面的前缀表排除）。
-    // 本工具与具体游戏无关：不要在这里写游戏 DLL 名。
-    // 白名单全落空时的退路：排除引擎/.NET 框架（它们占 Managed 的大多数），而不是把几百个 DLL 全扫一遍。
+    // `--dll *` = `--managed` 下**非框架**的 DLL：排除引擎/.NET 框架（它们占 Managed 的大多数），
+    // 而不是把几百个 DLL 全扫一遍。这里**不得**写任何具体游戏的程序集名：
+    // 本工具会被复制到别的游戏仓，游戏名只允许出现在调用方（扩展 / 手跑命令）里。
     static readonly string[] FrameworkDllPrefixes =
     {
         "UnityEngine", "Unity.", "UnityEditor", "System", "mscorlib", "netstandard",
@@ -53,14 +53,19 @@ static class ApiProbe
         }
         var managed = Get(opt, "managed");
         var action = Get(opt, "action");
-        var dllArg = Get(opt, "dll") ?? "TeamSoda.Duckov.Core";
+        var dllArg = Get(opt, "dll");
+        if (dllArg == null)
+        {
+            Console.Error.WriteLine("api-probe: --dll is required (a DLL name without .dll, a comma list, an absolute path, or '*' for every non-framework DLL under --managed)");
+            return 2;
+        }
         var target = Get(opt, "target");
         var member = Get(opt, "member");
         int limit = int.TryParse(Get(opt, "limit"), out var ln) ? ln : 2000;
         int offset = int.TryParse(Get(opt, "offset"), out var ofs) ? Math.Max(0, ofs) : 0;
         if (managed == null || action == null)
         {
-            Console.Error.WriteLine("usage: api-probe --managed <dir> --action <search|members|decompile|il|strings> [--dll <name[,name]|*>] [--target <t>] [--member <m>] [--limit N] [--offset N]");
+            Console.Error.WriteLine("usage: api-probe --managed <dir> --dll <name[,name]|path|*> --action <search|members|decompile|il|strings> [--target <t>] [--member <m>] [--limit N] [--offset N]");
             return 2;
         }
         if (action is not ("search" or "members" or "decompile" or "il" or "strings"))
@@ -82,9 +87,11 @@ static class ApiProbe
         }
         var dlls = ResolveDlls(managed, dllArg);
         if (dlls.Count == 0) { Console.Error.WriteLine($"api-probe: no DLL matched '{dllArg}' under {managed}"); return 1; }
-        if (dllArg != "*")
+        if (dllArg != "*" && !dllArg.Contains('*'))
         {
-            // 注意：DLL 名里带点（TeamSoda.Duckov.Core），不能直接用 GetFileNameWithoutExtension
+            // 只有**精确名**才做「有没有匹配到」的告警：通配（`MyGame.*`）本来就可能匹配到好几个，
+            // 用字面量去比会误报「matched nothing」。
+            // 注意：DLL 名里带点（`MyGame.Data`），不能直接用 GetFileNameWithoutExtension
             var got = new HashSet<string>(dlls.Select(DllStem), StringComparer.OrdinalIgnoreCase);
             var absent = dllArg.Split(',').Select(x => x.Trim()).Where(x => x.Length > 0)
                 .Where(w => !got.Contains(DllStem(w))).ToList();
@@ -118,10 +125,13 @@ static class ApiProbe
             // A1/A3：不再只是一句 "no result" —— 告诉它搜过哪些 DLL、类型可能在哪、能不能换个 --dll。
             outLines.Add($"# ERROR: no result for target='{target}' member='{member}' in {dlls.Count} DLL(s)");
             outLines.Add($"#   searched: {string.Join(", ", dlls.Select(Path.GetFileName))}");
-            var owned = ResolveDlls(managed, "*");
-            outLines.Add(owned.Count > dlls.Count
-                ? "#   the type may live in another DLL - pass --dll <name> or --dll '*' (scans every non-framework DLL in Managed)"
-                : "#   --dll '*' already scanned every game DLL; check the type name (search with a shorter substring)");
+            var all = ResolveDlls(managed, "*");
+            if (all.Count > dlls.Count)
+            {
+                var others = all.Select(DllStem).Where(n => !dlls.Select(DllStem).Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();
+                outLines.Add($"#   the type may live in another DLL - pass --dll <name> or --dll '*' (other non-framework DLLs: {string.Join(", ", others.Take(8))}{(others.Count > 8 ? ", …" : "")})");
+            }
+            else outLines.Add("#   --dll '*' already scanned every non-framework DLL under --managed; check the type name (search with a shorter substring)");
             var sug = SuggestTypes(dlls, managed, target);
             if (sug.Count > 0) outLines.Add($"#   did you mean: {string.Join(", ", sug)}?");
         }
@@ -183,7 +193,7 @@ static class ApiProbe
 
     static string Get(Dictionary<string, string> o, string k) => o.TryGetValue(k, out var v) ? v : null;
 
-    /// 去掉末尾的 `.dll`（**不要**用 GetFileNameWithoutExtension：它会吃掉 `TeamSoda.Duckov.Core` 里的 `.Core`）
+    /// 去掉末尾的 `.dll`（**不要**用 GetFileNameWithoutExtension：它会吃掉 `MyGame.Data` 里的 `.Data`）
     static string DllStem(string x)
     {
         var n = Path.GetFileName(x);
@@ -208,14 +218,31 @@ static class ApiProbe
             }
         }
         var list = new List<string>();
+        var all = (Func<List<string>>)(() =>
+        {
+            try { return Directory.GetFiles(managed, "*.dll").ToList(); }
+            catch { return new List<string>(); }
+        });
         foreach (var raw in dllArg.Split(','))
         {
             var n = raw.Trim();
             if (n.Length == 0) continue;
+            if (n.Contains('*'))
+            {
+                // 通配（例如 `MyGame.*`、`Unity*.dll`）：按 managed 下的文件名匹配。
+                // 这条路让「游戏自有 DLL 有哪些」由调用方/仓库配置决定，探针里不再写死游戏名。
+                var rx = "^" + System.Text.RegularExpressions.Regex.Escape(
+                    n.EndsWith(".dll", StringComparison.OrdinalIgnoreCase) ? n : n + ".dll")
+                    .Replace(@"\*", ".*") + "$";
+                var re = new System.Text.RegularExpressions.Regex(rx, System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                foreach (var f in all().OrderBy(x => x, StringComparer.OrdinalIgnoreCase))
+                    if (re.IsMatch(Path.GetFileName(f))) list.Add(f);
+                continue;
+            }
             var p = Path.Combine(managed, n.EndsWith(".dll") ? n : n + ".dll");
             if (File.Exists(p)) list.Add(p);
         }
-        return list;
+        return list.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     static List<string> RunOne(string dll, string managed, string action, string target, string member, int offset)

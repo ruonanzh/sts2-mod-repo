@@ -9,8 +9,8 @@
 
 ```bash
 dotnet run --project tools/api-probe -- \
-  --managed "<games>/.../Managed" --action <search|members|decompile|il|strings> \
-  [--dll TeamSoda.Duckov.Core] [--target <type-or-substring>] [--member <method>] [--limit N] [--offset N]
+  --managed "<game data dir>" --dll "<name[,name]|path|*>" --action <search|members|decompile|il|strings> \
+  [--target <type-or-substring>] [--member <method>] [--limit N] [--offset N]
 ```
 
 | action | 作用 |
@@ -21,8 +21,24 @@ dotnet run --project tools/api-probe -- \
 | `il` | 反编译类型/方法的 **IL** |
 | `strings` | 扫程序集里的**字符串字面量**（每次最多 500 条，`--offset` 翻页）|
 
-- `--dll`：默认 `TeamSoda.Duckov.Core`；可逗号分隔多个，或 `*`（Managed 下全部）。
-- `--target`：类型名（`Duckov.BlackMarkets.BlackMarket` 或短名 `BlackMarket`）。
+- `--dll`：**必填**。给 DLL 名（不带 `.dll`）、逗号分隔多个、**通配**（`MyGame.*`、`Unity*.dll`）、绝对路径，
+  或 `*`（`--managed` 下所有**非框架** DLL）。
+  本探针**不自带默认值**：它不得知道任何具体游戏的程序集名（本文件会被复制到别的游戏仓）。
+  `agent` 侧的 `inspect_api` 按这个仓库 `mod-repo.json` 的 `compile.references` 与 `compile.packages` 拼出这串。
+- **`*` 很宽**：它是"非框架"，会把游戏目录下的第三方插件（DOTween / Odin / UniTask 这类）一起扫。
+  想只扫游戏自己的程序集，用通配（例如 `--dll 'MyGame.*,MyGame.Data'`）；默认值由 `inspect_api` 按 `mod-repo.json` 的 `compile.references` 拼出来。
+
+**`--managed` 是程序集解析根，不只是"去哪找 dll"**：它的作用是 `UniversalAssemblyResolver` 的搜索根，
+基类与依赖类型都从这里解析。若目标程序集**不在**该目录（例如来自 NuGet 缓存），正确写法是
+
+```
+--managed <游戏数据目录>             ← 永远指向游戏目录（StS2 是 data_sts2_<平台>_<架构>，没有 /Managed 这一层）
+--dll     <目标 dll 的绝对路径>       ← Path.Combine 遇绝对路径原样返回
+```
+
+反例：把 NuGet 包目录当 `--managed`，游戏程序集就解析不到，基类链被**静默截断**
+（`class base` 退化成 `TypeKind.Unknown` 并被过滤掉，只剩接口），看起来像"类型没有基类"。
+- `--target`：类型名（`Ns.Sub.Type` 或短名 `Type`）。
 - `--member`：方法/字段名（配合 `decompile`/`il`）。
 - `--offset`：跳过前 N 条，给 `search`/`strings` 翻页用（截断行会提示下一页的 `--offset`）。
 
@@ -32,19 +48,38 @@ dotnet run --project tools/api-probe -- \
 |---|---|
 | 0 | 成功（含合法空结果）|
 | 1 | 目标不存在（类型/成员查不到）或某个 DLL 解析失败 |
-| 2 | 调用方式错（未知 flag、flag 缺值、`members`/`decompile`/`il` 没给 `--target`）|
+| 2 | 调用方式错（未知 flag、flag 缺值、没给 `--dll`、`members`/`decompile`/`il` 没给 `--target`）|
 
 - 找不到时不再只说 `no result`：会列出**搜过哪些 DLL**、提示换 `--dll <name>` / `--dll '*'`，并给 3 个近邻类型名。
-- 默认 `--dll` 是 `TeamSoda.Duckov.Core`；查 `ItemStatsSystem` 的类型要 `--dll ItemStatsSystem`。
+- 一个类型可能住在多个 DLL 里；`--target` 查不到时先换 `--dll`（或 `--dll '*'`）再下结论。
 - 单个 DLL 解析异常 → 输出里 `# ERROR: …` 且 **exit 1**（以前混在正文里、exit 0）。
 - `search` / `strings` 没有命中 → **exit 0** + `# search: 0 match(es) … this is a legal empty result`（空结果是合法结果；`members`/`decompile`/`il` 无输出仍是 exit 1）。
-- `--dll` 写了不存在的名字 → 解析出的 DLL 列表不含它时打 `# WARNING: --dll not found: …`（不再静默当成「没找到类型」）。名字里带点的（`TeamSoda.Duckov.Core`）按完整名比对，不会被当成扩展名切掉。
+- `--dll` 写了不存在的名字 → 解析出的 DLL 列表不含它时打 `# WARNING: --dll not found: …`（不再静默当成「没找到类型」）。名字里带点的（`MyGame.Data`）按完整名比对，不会被当成扩展名切掉。
 
 ## 依赖（vendored，免联网）
 
 `lib/` 下随附 ILSpy 的 `ICSharpCode.Decompiler`（MIT, v11.1.0.9782）及其两个 BCL 依赖
 （`System.Reflection.Metadata` / `System.Collections.Immutable`），针对 net8.0。
+许可全文与版本见本目录 `lib/` 随附说明（本仓暂未提供仓根许可清单）。
 **无需 NuGet 下载** —— `dotnet run` 时直接引用 `lib/`。
 
 > 为什么不用 `ilspycmd`（CLI）：它没有"引用/调用点"等能力，且不便被工具调用；我们要的是
 > 可组合的统一接口。本探针只实现 V1 的 5 个 action；`refs`（调用图）与 Unity 资产是后续。
+
+---
+
+## 本仓的偏离记录（同步上游前先看这里）
+
+`Program.cs`、`api-probe.csproj`、`lib/*.dll` 与上游（`unity-mono-mod`，工具维护方是 duckov）
+**字节一致**，不要改。本文件（README）有 4 处仓库本地化，上游同步后需要重新套用：
+
+1. 用法行里的 `--managed` 示例：本游戏的数据目录叫 `data_sts2_<平台>_<架构>`，没有 `Managed` 这一层。
+2. 提到 agent 侧工具名：本仓叫 `inspect_api`（上游叫 `inspect_game_api`）。
+3. 提到契约文件名：本仓是 `mod-repo.json`（上游是 `game.json`）。
+4. 解析根示例同上。
+
+比对命令：
+
+```bash
+diff -r <上游>/tools/api-probe tools/api-probe
+```
