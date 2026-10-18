@@ -150,6 +150,9 @@ does not crash, so **the symptom is a card with no name, not a crash**.
 - Extend a `Custom*Model` class (`CustomCardModel` / `CustomRelicModel` / `CustomPotionModel` /
   `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` / the other
   model classes). The constructor automatically calls `CustomContentDictionary.AddModel(GetType())`.
+- **A card pool and a starting deck are two different lists.** The pool decides whether a card can
+  appear as a reward (`IroncladCardPool` holds 87 fixed cards). The starting deck is the 10 fixed
+  cards in `Ironclad.StartingDeck`. A card in the pool is not in the opening hand (`traps.md` 15).
 - **Pool membership uses `[Pool(typeof(IroncladCardPool))]`, and this attribute is mandatory.**
   This is the decompiled `BaseLib.Patches.Content.CustomContentDictionary.AddModel`:
 

@@ -23,10 +23,13 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
    The wiki is a snapshot of the upstream documentation. It shows how the author expects the code
    to look, and it lists the topics that it does not cover at all. Step 5 queries the real names.
 
-2. Copy the sample directory, then **change all three places that carry the name in one pass**:
+2. Copy a sample directory, then **change all three places that carry the name in one pass**.
+   Use `reference/example_mod/` for a mod that only patches the game. Use `reference/example_card/`
+   for a mod that adds content: that sample already carries `[Pool]`, the in-code localisation, and
+   the patch that puts the card into the starting deck.
 
    ```
-   cp -r reference/example_mod/. your_mods/<your name>/
+   cp -r reference/example_mod/. your_mods/<your name>/      # or reference/example_card/
    ```
 
    The `/.` matters. `cp -r reference/example_mod your_mods/<name>` copies the directory

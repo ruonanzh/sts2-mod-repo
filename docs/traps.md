@@ -236,3 +236,43 @@ the `[ERROR]` stack.
 
 **Fix**: Add `[Pool(typeof(...))]` to the class. After you add it, do **not** also write
 `ModHelper.AddModelToPool` by hand (`docs/game.md` §7).
+
+## 15. The card is in the pool, but it never shows up
+
+**Symptom**: `ModelIdSerializationCache` counts the card (`Entries` went up by one), the game
+starts, and the card is still nowhere in play.
+
+**Cause**: A pool and a starting deck are two different lists.
+
+| List | What it decides | Where it lives |
+|---|---|---|
+| Card pool | Which cards can appear as a reward, in a shop, or in the card library | `IroncladCardPool.GenerateAllCards()` (87 vanilla cards) plus whatever `ModHelper.AddModelToPool` appends |
+| Starting deck | Which cards you hold at the start of a run | `Ironclad.StartingDeck`, a fixed array of 10 cards: 5 Strike, 4 Defend, 1 Bash |
+
+Adding a card to the pool does nothing to the starting deck. A `Common` card in the Ironclad pool
+appears only as a combat reward, so a short test run may never show it.
+
+**How to check**: print what the game itself has, from a Harmony postfix on `ModelDb.Init`, with
+`[HarmonyPriority(Priority.Last)]` so it runs after the models exist:
+
+```csharp
+var pool = ModelDb.AllCardPools.OfType<IroncladCardPool>().First();
+var all = pool.AllCards.ToList();
+Log.Info($"pool count = {all.Count}, contains mine = {all.OfType<FocusedStrike>().Any()}");
+```
+
+A vanilla Ironclad pool has 87 cards. Measured output for `reference/example_card`:
+
+```
+[probe] ModelId of FocusedStrike = CARD.EXAMPLECARD-FOCUSED_STRIKE
+[probe] ironclad pool count = 88, contains FocusedStrike = True
+[probe] title = 'Focused Strike', rarity = Common, showInLibrary = True
+```
+
+That output proves registration, pool membership, and the localisation. It also proves the card
+will not be in the first hand.
+
+**Fix**: if the player must see the card immediately, append it to the starting deck with a Harmony
+postfix on the getter. `reference/example_card/StartingDeckPatch.cs` does exactly that, and
+`Ironclad.StartingDeck` returns `IEnumerable<CardModel>`, so the postfix appends one card and leaves
+the other 10 alone.
