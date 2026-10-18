@@ -84,7 +84,7 @@ These items are absent upstream or only half written. **Do not infer them from t
 
 | Gap | Current state | Where to look |
 |---|---|---|
-| How to change the portrait of a card | `models/custom-card.md` covers the frame and the banner only. The `CardModel` section is a TODO | Decompile `MegaCrit.Sts2.Core.Models.CardModel` and find `PortraitPath` |
+| How to change the portrait of a card | `models/custom-card.md` covers the frame and the banner only. The `CardModel` section is a TODO | Read `CustomPortraitPath` and `CustomPortrait` on `BaseLib.Abstracts.CustomCardModel`. BaseLib already patches the getter. Do not start from the vanilla `CardModel.Portrait`, which is not virtual |
 | How to replace a Spine creature animation | The `## Spine` section of `scenes/creature-visuals.md` is empty | Decompile `NCreatureVisuals` and the `.tscn` of a vanilla creature |
 | Potions | **The wiki has no page for this** | Decompile `BaseLib.Abstracts.CustomPotionModel`. It holds the embedded patches `Image`, `LargeImagePatch`, and `OutlinePatch` |
 | Custom characters | The pool section and the visual section of `models/custom-character.md` are both stubs | Decompile `BaseLib.Abstracts.CustomCharacterModel` |

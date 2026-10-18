@@ -58,6 +58,13 @@ key. A spelling error therefore raises no error, and the key silently does nothi
 manifest, and reports an error and skips the file when the `id` is absent. If the extra file has an
 `id`, it becomes a second mod, or it triggers `DUPLICATE_ID`.
 
+**The manifest scan is recursive.** `ModManager.ReadModsInDirRecursive` walks every subdirectory of
+`mods/` and reads every `.json` there as a manifest. A build tree copied by hand therefore floods the
+log: `bin/Release/*.deps.json` and the `obj/**/*.json` files each produce
+`Mod manifest <path> is missing the 'id' field!` (`ModManager.cs:376`). The loader skips those files, so
+this is noise rather than breakage, but it buries the lines you need. `install_mod` copies only
+`<id>.json` and `<id>.dll`, which is why the normal path never sees this.
+
 ## 3. Entry point
 
 ```csharp
@@ -122,7 +129,7 @@ the sibling directory at the same level.
 - The usual approach in the ecosystem to change a vanilla card image is to patch the getter of
   `CardModel.PortraitPath`. That patch must carry `[HarmonyPriority(Priority.First)]`. BaseLib,
   RitsuLib, and ATA all prefix the same getter.
-- **Where a mod card's portrait is looked up** (measured, not documented upstream). A card named
+- **Where the game looks up a mod card's portrait** (measured, not documented upstream). A card named
   `FocusedStrike` in mod `ExampleCard` inside the Ironclad pool makes the game request:
 
   ```
@@ -132,34 +139,48 @@ the sibling directory at the same level.
 
   So the key is `<pool title>/<mod id>-<class name>`, lowercased, with underscores between words.
   The file it looks for is a `.tres` under `card_atlas.sprites/<pool title>/`. A mod card without
-  that sprite still loads and still works. It shows a missing-atlas placeholder, and the game logs
+  that sprite still loads and still works. It draws a missing-atlas placeholder, and the game logs
   one WARN per sprite.
 
-### 6.0 How a DLL-only mod gets a picture in (measured, 2026-10-18)
+### 6.0 How a mod card gets a picture in (measured 2026-10-18, corrected 2026-10-18)
 
-Every art example in the upstream wiki returns a `res://<ModRoot>/images/...` path: orb icons,
-ancient map icons, event portraits. That path needs the mod's own PCK. A DLL-only mod has no
-`res://<id>/` namespace, so the wiki's answer does not apply to it. Measurements:
+**There is a supported route, and it is one property.** `BaseLib.Abstracts.CustomCardModel` declares
+two virtual members, and BaseLib already installs the patch that uses them:
+
+```csharp
+// CustomCardModel.cs:65,67
+public virtual string? CustomPortraitPath => null;
+public virtual Texture2D? CustomPortrait => null;
+
+// CustomCardPortrait.cs, a Harmony prefix on CardModel.Portrait
+if (instance is CustomCardModel m && m.CustomPortrait != null) { __result = m.CustomPortrait; return false; }
+```
+
+So a card that derives from `CustomCardModel` overrides `CustomPortrait` and returns a texture. You need
+nothing else. The first pass missed this because it read only the vanilla `CardModel`. There,
+`PortraitPath` is virtual and `Portrait` is not, which makes the path look like the only hook.
+
+The measurements below are still true, and they matter when you want art **without a PCK**:
 
 | Attempt | Result |
 |---|---|
-| `PortraitPath => "res://..."` for a sprite we ship | Impossible without a PCK. The resource is not there |
-| `PortraitPath => "user://x.png"` with a real PNG | `ResourceLoader.Load` returns **null**, silently. A raw PNG has no importer in a built game |
+| `PortraitPath => "res://..."` for a sprite the mod ships | Impossible without a PCK. The resource is not there |
+| `PortraitPath => "user://x.png"` with a real PNG | `ResourceLoader.Load` returns **null**, silently. A built game has no importer for a raw PNG |
 | `Image.LoadFromFile("user://x.png")` | Works. It read a 512x384 png |
 | `ImageTexture.CreateFromImage(image)` | Works. It returns a usable `Texture2D` |
-| Harmony postfix on the `Portrait` getter | Works. The card then reports `Portrait = 512x384` |
+| Override `CustomPortrait` and return that texture | Works, and it is the intended route |
+| Harmony postfix on `CardModel.Portrait` | Also works, but it duplicates what BaseLib already does. Do not add it |
 
-Two facts force the last row. `CardModel.PortraitPath` is `virtual`, but `CardModel.Portrait` is
-not, and `Portrait` is what the UI reads. So the path gets you nowhere and the texture has to be
-supplied by a patch.
+Every art example in the upstream wiki returns a `res://<ModRoot>/images/...` path: orb icons, ancient
+map icons, event portraits. That path needs the mod's own PCK, so those examples do not apply to a
+DLL-only mod.
 
-`reference/example_card/` does this in `PortraitPatch.cs`: it reads `portrait.png` from the mod's
-own directory, caches the texture, and returns it for that one card. `install_mod` copies image
-files next to the assembly, because the assembly reads them from its own directory.
+`reference/example_card/` reads `portrait.png` from its own directory, builds a texture, and returns it
+from `CustomPortrait`. `install_mod` copies image files next to the assembly, because the assembly reads
+them from that directory. Shipping a `<id>.pck` remains the real answer, and the art direction is
+deferred.
 
-This is a stopgap, not a design. The real fix is a `<id>.pck`, and the art direction is deferred.
-
-### 6.0b Why a mod card shows as locked in the card library
+### 6.0b Why the card library marks a mod card as locked
 
 The card library decides in `NCardLibraryGrid.RefreshVisibility` with two sets:
 
@@ -207,14 +228,26 @@ Two options:
 `reference/example_card` uses the second option. When a key is absent, the game logs an error and
 does not crash, so **the symptom is a card with no name, not a crash**.
 
+Two details make the in-code route silent when it is wrong:
+
+1. **`SimpleLoc.TrySimplify` rewrites a string only when it starts with `#`** (`SimpleLoc.cs:106-112`).
+   A plain `"Deal {Damage} damage."` goes to SmartFormat unchanged.
+2. **The placeholder name must equal `DynamicVar.Name` exactly.** `LocString.Add(DynamicVar)` keys the
+   variable by that name, so `new DamageVar(...)` produces `Damage`. Writing `{damage}` or `{Dmg}`
+   reports nothing. The description simply never formats.
+
 ## 7. Content extension (BaseLib)
 
 - Extend a `Custom*Model` class (`CustomCardModel` / `CustomRelicModel` / `CustomPotionModel` /
   `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` / the other
   model classes). The constructor automatically calls `CustomContentDictionary.AddModel(GetType())`.
 - **A card pool and a starting deck are two different lists.** The pool decides whether a card can
-  appear as a reward (`IroncladCardPool` holds 87 fixed cards). The starting deck is the 10 fixed
+  appear as a reward (`IroncladCardPool` holds 87 fixed cards). The starting deck is the 10 hard-coded
   cards in `Ironclad.StartingDeck`. A card in the pool is not in the opening hand (`traps.md` 15).
+- **Use the `CardAttack` overload whose second parameter is a `CardPlay`.** The overloads that take a
+  `Creature` target instead, and the ones that take a `decimal`, carry
+  `[Obsolete("Use the variant that has a CardPlay as the second parameter instead ...")]`
+  (`CommonActions.cs:52,58,128`). The wiki's card example shows the obsolete form, so do not copy it.
 - **Pool membership uses `[Pool(typeof(IroncladCardPool))]`, and this attribute is mandatory.**
   This is the decompiled `BaseLib.Patches.Content.CustomContentDictionary.AddModel`:
 
@@ -248,7 +281,7 @@ does not crash, so **the symptom is a card with no name, not a crash**.
 ## 7.1 Removing a mod does not break the save
 
 If a save names a model that no longer exists, the game substitutes a deprecated placeholder. This
-is built in, and it covers every content type:
+ships with the game, and it covers every content type:
 
 ```csharp
 /// Obtains a card by ID, or falls back to the deprecated card if it's not found.
@@ -265,7 +298,7 @@ public static CardModel CardOrDeprecated(ModelId id)
 
 So a run save that still holds a card from a removed mod loads normally. The card turns into
 `DeprecatedCard`: a status card named "deprecated card" with BETA art. When the player draws it, it
-draws a card, removes itself from the deck, and exhausts. Nothing is corrupted.
+draws a card, removes itself from the deck, and exhausts. Nothing breaks.
 
 Measured on 2026-10-18 by removing the mod from a save whose deck held
 `CARD.EXAMPLECARD-FOCUSED_STRIKE`: the deck entry appeared as that status card, and the run loaded.
@@ -276,7 +309,7 @@ The `discovered_cards` list in `progress.save` also keeps the stale id. The card
 Do not conclude from `ModelDb.GetById` that a missing model crashes a load. `GetById` throws
 `ModelNotFoundException`, but the save path deliberately calls the `OrDeprecated` variant instead.
 
-## 8. Limits when you find a name with fetch
+## 8. Limits when you resolve a name
 
 `inspect_api` reads both the `sts2.dll` of the **game** (6381 types) and the `BaseLib.dll` of
 **BaseLib** (1015 types), and each result carries a `[game]` or `[baselib]` label. Therefore:

@@ -81,6 +81,11 @@ cannot read a json localization at all.
 When a key is absent, BaseLib reports an error and does not crash. So this problem does not show
 itself.
 
+**The same silence hides two mistakes in the C# route.** `SimpleLoc.TrySimplify` rewrites a string
+only when it starts with `#`, so a plain description goes to SmartFormat untouched. The placeholder
+must also equal `DynamicVar.Name` exactly: `{Damage}` works, `{damage}` never formats and reports
+nothing. The title still shows, so the card looks fine until you read the description.
+
 ## 4. The patch runs but it has no effect
 
 **Symptom**: The DLL loads, the log is normal, and the game behaviour does not change.
