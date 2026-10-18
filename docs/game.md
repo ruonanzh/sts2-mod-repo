@@ -102,6 +102,26 @@ mac 有两份数据目录（`data_sts2_macos_arm64` / `data_sts2_macos_x86_64`�
 - **PCK 能覆盖原版路径**：`ProjectSettings.LoadResourcePack(pack, replaceFiles = true, ...)`，后挂者胜。
 - 改原版卡图的生态做法是 patch `CardModel.PortraitPath` 的 getter，且必须带 `[HarmonyPriority(Priority.First)]`（BaseLib / RitsuLib / ATA 都 prefix 同一个 getter）。
 
+### 6.1 本地化：`res://` 只认 mod 自己的 PCK
+
+反编译 `ModManager.GetModdedLocTables`：
+
+```csharp
+string text = $"res://{mod.manifest.id}/localization/{language}/{file}";
+if (ResourceLoader.Exists(text)) yield return text;
+```
+
+只查 `res://`。**DLL-only 的 mod 带不了 json 本地化** —— `res://<id>/` 这个前缀只有该 mod 的 PCK 挂上来之后才存在。
+
+两条出路：
+
+| 做法 | 需要 PCK | 适合 |
+|---|---|---|
+| `<id>/localization/<eng\|zhs>/cards.json` | **要** | 文案多、要翻译 |
+| C# 里重写 BaseLib 的 `ILocalizationProvider.Localization`（`CardLoc` / `PowerLoc` / `RelicLoc`… 有隐式转换到 `List<(string,string)>`） | 不需要 | 文案少、v1 只做中文或英文 |
+
+`reference/example_card` 用的是第二条。缺 key 时游戏只报错不崩，所以**症状是卡牌没名字，不是闪退**。
+
 ## 7. 内容扩展（BaseLib）
 
 - 继承 `Custom*Model`（`CustomCardModel` / `CustomRelicModel` / `CustomPotionModel` / `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` …），构造函数会自动 `CustomContentDictionary.AddModel(GetType())`。

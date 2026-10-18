@@ -51,7 +51,21 @@ public abstract class MyPower : BaseLib.Abstracts.CustomPowerModel { }
 
 **反过来也成立**：不继承 BaseLib 类型的 mod **不需要** BaseLib。`reference/example_mod` 就是零依赖的，照样能加载。BaseLib 只有要它的便利类时才引入。
 
-## 3. 补丁写了但没效果
+## 3. 卡牌加进去了但没名字
+
+**症状**：模型计数涨了（`ModelIdSerializationCache ... Entries: 1623`），卡牌也注册了，但游戏里标题是一串 key 或者空白。没有崩溃。
+
+**原因**：本地化没生效。`ModManager.GetModdedLocTables` 只查 `res://<mod.id>/localization/...`，而 **DLL-only 的 mod 没有 `res://` 命名空间** —— json 本地化根本读不到。
+
+**两条修法**：
+
+- 出 PCK（`.pck` 里带 `localization/<lang>/cards.json`）；
+- 或者在 C# 里重写 BaseLib 的 `Localization` 属性，例如
+  `public override List<(string, string)> Localization => new CardLoc("Focused Strike", "Deal {Damage} damage.");`
+
+缺 key 时 BaseLib 只报错不崩，所以这个问题不会自己暴露。
+
+## 4. 补丁写了但没效果
 
 **症状**：DLL 加载成功，日志正常，但游戏行为没变。
 
@@ -65,7 +79,7 @@ public abstract class MyPower : BaseLib.Abstracts.CustomPowerModel { }
 
 **确认方式**：在 prefix 里 `Log.Info` 一行，看它有没有出现在 `godot.log`。
 
-## 4. 编译"成功"但 dll 是空壳
+## 5. 编译"成功"但 dll 是空壳
 
 **症状**：`dotnet build` 退出 0，dll 存在，游戏能加载，但什么都没发生。
 
@@ -77,13 +91,13 @@ public abstract class MyPower : BaseLib.Abstracts.CustomPowerModel { }
 strings -a <id>.dll | grep ModInitializerAttribute
 ```
 
-## 5. `version` 解析失败，依赖方全部 FAILED
+## 6. `version` 解析失败，依赖方全部 FAILED
 
 **症状**：别的 mod 声明依赖你，报 `MOD_ERROR.DEPENDENCY_VERSION_INVALID`。
 
 **原因**：`version` 不是 `x.y.z` 形式，游戏解析失败后 `Mod.version` 为 null。
 
-## 6. `min_game_version` 写太高
+## 7. `min_game_version` 写太高
 
 **症状**：mod 完全不加载，日志说明不支持的版本。
 
@@ -91,19 +105,19 @@ strings -a <id>.dll | grep ModInitializerAttribute
 
 **本机**：`v0.107.1`。改游戏版本后要一起改这里。
 
-## 7. `affects_gameplay` 设错
+## 8. `affects_gameplay` 设错
 
 **症状**：多人联机连不上，或对方的游戏状态和你不一样。
 
 **原因**：这个字段默认 **true**。纯外观 mod 设成 true 会被拉进 mod 一致性校验；改游戏逻辑的 mod 设成 false 会导致 desync。
 
-## 8. 同一个 mod 同时存在于 Workshop 与本地
+## 9. 同一个 mod 同时存在于 Workshop 与本地
 
 **症状**：日志 `DisabledDuplicate`。
 
 **原因**：`RemoveDisabledMods` 故意这么做——**本地优先**，方便 modder 开发。不是 bug。
 
-## 9. 带启动参数直接跑二进制
+## 10. 带启动参数直接跑二进制
 
 **症状**：游戏闪退或 Steam 没接管。
 
@@ -113,14 +127,14 @@ strings -a <id>.dll | grep ModInitializerAttribute
 open "steam://rungameid/2868840//-nomods"
 ```
 
-## 10. 改了 `settings.save` 但被迁移丢掉
+## 11. 改了 `settings.save` 但被迁移丢掉
 
 **症状**：手写的键启动后消失，行为不变。
 
 **原因**：`SettingsSave` 有版本迁移（本机从 v4 迁移到 v5 已经发生过一次），且键名走 `SnakeCaseLower`。
 **不得按反编译的属性名猜键名**：`PlayerAgreedToModLoading` 的落盘名是 `mods_enabled`。
 
-## 11. macOS 特有
+## 12. macOS 特有
 
 - mods 根在 **`.app` 包内**（`Contents/MacOS/mods/`），写进去会改动 bundle 内容。Steam 校验完整性时可能被清掉。
 - 游戏有 arm64 与 x86_64 两份数据目录，编译引用的 `sts2.dll` 要与当前进程架构一致（`managedDirFor` 会自动兜底）。
