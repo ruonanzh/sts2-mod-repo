@@ -121,8 +121,8 @@ strings -a <id>.dll | grep ModInitializerAttribute
 
 **所以规则是**：
 
-- **玩家机器上，依赖类 mod（BaseLib 这类）只能从 Workshop 订阅**，不得手工拷贝。
-- 本地拷贝是开发者的便利（改一版、立刻试），开发完要清掉。
+- **玩家机器上不得手工拷贝依赖**。依赖由 `install_mod` 判断：玩家一份都没有，才把 `vendor/` 里随仓带的那份放进去；已经有一份（不管来自 Workshop 还是 mods 目录）就不动。判据在 `.pi/lib/mod-deps.ts`，测试在 `scripts/test-mod-install-deps.mjs`。
+- 本地拷贝对开发者是便利（改一版、立刻试），开发完要清掉。
 - 自己的 mod 更是如此：本地留着旧版，玩家订阅的新版就被关了。
 
 **不得指望有报错**：这条只打一行 WARN，游戏照常启动，看起来一切正常。

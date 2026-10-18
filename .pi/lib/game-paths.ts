@@ -544,7 +544,7 @@ function verifyPath(
 ): PathVerdict {
   if (kind === "gameDir") return checkGameDir(p, cfg);
   if (kind === "workshopDir") return checkWorkshopDir(p, appId);
-  return checkModInstallDir(p);
+  return checkModInstallDir(p, cfg);
 }
 
 /** 内部发现/派生（无参那一层）：游戏目录走发现，其它两条由已确认的游戏目录派生 */

@@ -56,5 +56,12 @@
   "workshop": {
     "supported": true,
     "uploader": "megacrit/sts2-mod-uploader"
-  }
+  },
+  "runtimeDependencies": [
+    {
+      "id": "BaseLib",
+      "vendorDir": "vendor/baselib",
+      "workshopUrl": "https://steamcommunity.com/sharedfiles/filedetails/?id=3737335127"
+    }
+  ]
 }

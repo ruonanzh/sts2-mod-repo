@@ -11,9 +11,17 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
-import { modInstallDirFor, readModRepoConfig, readState } from "../lib/game-paths";
+import { modInstallDirFor, pathsFromGameDir, readModRepoConfig, readState } from "../lib/game-paths";
 import { readManifest } from "../lib/mod-identity";
 import { readModLoadingState } from "../lib/game-settings";
+import {
+  decideDependencyAction,
+  readDependencySpecs,
+  resolveDependency,
+  stripBom,
+  type DepSpec,
+  type ResolveContext,
+} from "../lib/mod-deps";
 
 /**
  * install_mod -- copy a mod's runtime products into the game's mods directory.
@@ -69,6 +77,168 @@ function chooseTarget(modRoot: string, dirName: string, record: InstallRecord | 
   return join(modRoot, `${dirName}_pimod`);
 }
 
+/**
+ * A dependency this repository can put on disk itself: `runtimeDependencies[]` in mod-repo.json.
+ * `vendorDir` is a repository path; its contents are copied verbatim into the game's mods
+ * directory as `<id>/`. Nothing about which dependency is bundled is hardcoded here.
+ */
+interface VendorSpec {
+  id: string;
+  dir: string;
+  workshopUrl?: string;
+}
+
+function readVendorSpecs(repoRoot: string): VendorSpec[] {
+  let raw: { runtimeDependencies?: unknown };
+  try {
+    raw = JSON.parse(stripBom(readFileSync(join(repoRoot, "mod-repo.json"), "utf8")));
+  } catch {
+    return [];
+  }
+  const list = raw?.runtimeDependencies;
+  if (!Array.isArray(list)) return [];
+  const out: VendorSpec[] = [];
+  for (const entry of list) {
+    const rec = entry as { id?: unknown; vendorDir?: unknown; workshopUrl?: unknown };
+    if (typeof rec?.id !== "string" || !rec.id.trim()) continue;
+    if (typeof rec?.vendorDir !== "string" || !rec.vendorDir.trim()) continue;
+    out.push({
+      id: rec.id.trim(),
+      dir: resolve(repoRoot, rec.vendorDir),
+      workshopUrl: typeof rec.workshopUrl === "string" ? rec.workshopUrl : undefined,
+    });
+  }
+  return out;
+}
+
+/**
+ * Copy a bundled dependency into the mods directory. Called only when the player has no copy
+ * at all (see `decideDependencyAction`) -- copying over an existing one is what pins an old
+ * version forever, because the loader prefers the local copy over the Workshop one.
+ */
+function installBundled(
+  vendor: VendorSpec,
+  modRoot: string,
+): { ok: true; dir: string } | { ok: false; reason: string } {
+  if (!existsSync(vendor.dir)) return { ok: false, reason: `${vendor.dir} does not exist` };
+  const target = join(modRoot, vendor.id);
+  if (existsSync(target)) return { ok: false, reason: `${target} already exists` };
+  const staging = join(modRoot, `.staging-dep-${process.pid}-${Date.now()}`);
+  try {
+    mkdirSync(staging, { recursive: true });
+    for (const entry of readdirSync(vendor.dir, { withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      // Documentation and licences are ours, not the game's.
+      if (entry.name.toLowerCase() === "readme.md") continue;
+      if (entry.name.toLowerCase().startsWith("license")) continue;
+      cpSync(join(vendor.dir, entry.name), join(staging, entry.name));
+    }
+    // The loader finds a mod's manifest by id, so a missing <id>.json would install nothing.
+    if (!existsSync(join(staging, `${vendor.id}.json`))) {
+      rmSync(staging, { recursive: true, force: true });
+      return { ok: false, reason: `the bundled copy has no ${vendor.id}.json` };
+    }
+    renameSync(staging, target);
+    return { ok: true, dir: target };
+  } catch (error) {
+    if (existsSync(staging)) rmSync(staging, { recursive: true, force: true });
+    return { ok: false, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+interface DependencyReport {
+  lines: string[];
+  /** Non-empty when the player has to act before the mod can load. */
+  blockers: string[];
+}
+
+/**
+ * Report on every dependency the mod declares, and fill only the ones nobody has.
+ *
+ * The rule this enforces is in .pi/lib/mod-deps.ts: a local copy wins over a Workshop copy,
+ * silently, so installing one where any copy already exists would pin the version.
+ */
+function handleDependencies(args: {
+  specs: DepSpec[];
+  ctx: ResolveContext;
+  modRoot: string;
+  vendors: VendorSpec[];
+}): DependencyReport {
+  const { specs, ctx, modRoot, vendors } = args;
+  const lines: string[] = [];
+  const blockers: string[] = [];
+
+  for (const spec of specs) {
+    const action = decideDependencyAction(resolveDependency(spec, ctx));
+    const min = spec.minVersion ? ` (needs ${spec.minVersion} or newer)` : "";
+    const vendor = vendors.find((v) => v.id === spec.id);
+
+    if (action.kind === "ok") {
+      const res = resolveDependency(spec, ctx);
+      const shown = res.installations.find((i) => i.source === "local") ?? res.installations[0];
+      const from = shown?.source === "workshop" ? "from the Workshop" : "from the mods directory";
+      lines.push(`NOTE: dependency ${spec.id} ${shown?.version ?? "(version unreadable)"} is already installed ${from}; it was not touched.`);
+      continue;
+    }
+
+    if (action.kind === "install-bundled") {
+      if (!vendor) {
+        lines.push(`WARN: dependency ${spec.id} is not installed, and this repository ships no bundled copy${min}.`);
+        blockers.push(
+          `Ask the player to subscribe to ${spec.id} in the Steam Workshop, then restart the game.`,
+        );
+        continue;
+      }
+      const done = installBundled(vendor, modRoot);
+      if (!done.ok) {
+        lines.push(`WARN: dependency ${spec.id} is not installed and the bundled copy could not be placed: ${done.reason}.`);
+        blockers.push(
+          vendor.workshopUrl
+            ? `Ask the player to subscribe to ${spec.id} in the Steam Workshop (${vendor.workshopUrl}), then restart the game.`
+            : `Ask the player to subscribe to ${spec.id} in the Steam Workshop, then restart the game.`,
+        );
+        continue;
+      }
+      const after = resolveDependency(spec, ctx);
+      const got = after.installations.find((i) => i.dir === done.dir)?.version ?? null;
+      lines.push(`PASS: dependency ${spec.id} was not installed, so the bundled ${got ?? ""} was placed in ${done.dir}.`);
+      lines.push(
+        `NOTE: that copy now wins over any Workshop subscription the player makes later (the loader prefers the mods directory). If the player subscribes anyway, the local copy has to be removed.`,
+      );
+      continue;
+    }
+
+    // Every remaining case leaves the installed copy exactly as it is.
+    const res = resolveDependency(spec, ctx);
+    if (action.kind === "warn-duplicate") {
+      const local = res.installations.find((i) => i.source === "local");
+      const workshop = res.installations.find((i) => i.source === "workshop");
+      lines.push(
+        `WARN: ${spec.id} exists in both places - ${local?.version ?? "?"} in ${local?.dir} and ${workshop?.version ?? "?"} from the Workshop. The game loads only the local one and disables the Workshop copy, so Workshop updates never apply.`,
+      );
+      blockers.push(
+        `Tell the player to delete ${local?.dir} and keep the Workshop subscription, then restart the game. Do not delete it for them without asking.`,
+      );
+      continue;
+    }
+    if (action.kind === "warn-too-old") {
+      const shown = res.installations.find((i) => i.source === "local") ?? res.installations[0];
+      lines.push(`WARN: ${spec.id} ${shown?.version ?? ""} is older than the required ${spec.minVersion}${min}.`);
+      blockers.push(
+        shown?.source === "workshop"
+          ? `Tell the player to update ${spec.id} in the Steam Workshop, then restart the game. Do not install a copy over it.`
+          : `Tell the player the local ${spec.id} is too old; it has to be removed or replaced before this mod works. Do not overwrite it silently.`,
+      );
+      continue;
+    }
+    const shown = res.installations[0];
+    lines.push(`WARN: could not read the version of ${spec.id} in ${shown?.dir}${min}.`);
+    blockers.push(`Ask the player to confirm the ${spec.id} version, or reinstall it from the Steam Workshop.`);
+  }
+
+  return { lines, blockers };
+}
+
 /** Locate the built assembly: mod root first (Publish-style output), then bin/Release. */
 function findDll(modDir: string, id: string): string | null {
   const candidates = [
@@ -117,13 +287,14 @@ export default function (pi: ExtensionAPI) {
 
       // Target directory comes from the recorded paths only.
       const state = readState(repoRoot);
+      const config = readModRepoConfig(repoRoot);
       const recorded = typeof state.modInstallDir === "string" ? state.modInstallDir : null;
       const gameDir = typeof state.gameDir === "string" ? state.gameDir : null;
       let modRoot = recorded;
       if (!modRoot && gameDir) {
         // Derive from the confirmed game directory, never from a guess: mac is inside the
         // .app bundle (Contents/MacOS/mods), Windows is <install>/mods.
-        modRoot = modInstallDirFor(gameDir, readModRepoConfig(repoRoot));
+        modRoot = modInstallDirFor(gameDir, config);
       }
       if (!modRoot || !existsSync(modRoot)) {
         return {
@@ -217,9 +388,6 @@ export default function (pi: ExtensionAPI) {
 
       writeRecord(modDir, { name: id, installedDir: target });
 
-      // Report the mod-loading switch. This is the difference between "installed" and
-      // "will actually load", and the game gives no hint when the switch is off.
-      const loading = readModLoadingState();
       const lines: string[] = [];
       lines.push(`PASS: installed ${id} into ${target}`);
       if (renamed)
@@ -227,6 +395,30 @@ export default function (pi: ExtensionAPI) {
           `NOTE: the target ${dirName} is used by another mod, so this copy went to ${targetName}. That other mod was not touched.`,
         );
 
+      // Dependency mods (BaseLib and the like). This mod cannot load without them, and
+      // copying one over an existing copy would pin that copy's version forever.
+      const workshopDir =
+        typeof state.workshopDir === "string"
+          ? state.workshopDir
+          : gameDir
+            ? pathsFromGameDir(gameDir, config).workshopDir
+            : null;
+      let depLockers: string[] = [];
+      const specs = readDependencySpecs(manifest.identity.manifestPath);
+      if (specs.length) {
+        const report = handleDependencies({
+          specs,
+          ctx: { modRoot, workshopDir },
+          modRoot,
+          vendors: readVendorSpecs(repoRoot),
+        });
+        lines.push(...report.lines);
+        depLockers = report.blockers;
+      }
+
+      // Report the mod-loading switch. This is the difference between "installed" and
+      // "will actually load", and the game gives no hint when the switch is off.
+      const loading = readModLoadingState();
       let nextAction: string;
       if (loading.modsEnabled === false) {
         lines.push(
@@ -244,6 +436,8 @@ export default function (pi: ExtensionAPI) {
         nextAction =
           "Restart the game and check godot.log for 'Loading assembly DLL' and 'RUNNING MODDED'. See the mod-installer skill.";
       }
+      // A dependency problem outranks the restart advice: the mod cannot load until it is fixed.
+      if (depLockers.length) nextAction = depLockers.join(" ");
       lines.push(`NEXT: ${nextAction}`);
 
       return {

@@ -33,3 +33,8 @@ v1 **不带资源包**（`compile.pck: false`）。要加 `.pck` 需要先打通
 
 `tools/` 下有入库的第三方二进制（随仓的反编译器）。清单、版本与 MIT 许可全文见
 [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)。这三个文件与上游字节相同，不得改动。
+
+`vendor/baselib/` 是另一类：**BaseLib**，玩家机器上要被游戏加载的内容 mod 依赖（MIT，见
+[`vendor/baselib/README.md`](vendor/baselib/README.md)）。它只在玩家**一份都没有**时由
+`install_mod` 放进去；已经有一份就不动，否则会盖掉 Workshop 订阅并静默钉死版本
+（[`docs/traps.md`](docs/traps.md) 第 9 条）。
