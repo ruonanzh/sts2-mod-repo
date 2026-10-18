@@ -135,6 +135,30 @@ the sibling directory at the same level.
   that sprite still loads and still works. It shows a missing-atlas placeholder, and the game logs
   one WARN per sprite.
 
+### 6.0 How a DLL-only mod gets a picture in (measured, 2026-10-18)
+
+Every art example in the upstream wiki returns a `res://<ModRoot>/images/...` path: orb icons,
+ancient map icons, event portraits. That path needs the mod's own PCK. A DLL-only mod has no
+`res://<id>/` namespace, so the wiki's answer does not apply to it. Measurements:
+
+| Attempt | Result |
+|---|---|
+| `PortraitPath => "res://..."` for a sprite we ship | Impossible without a PCK. The resource is not there |
+| `PortraitPath => "user://x.png"` with a real PNG | `ResourceLoader.Load` returns **null**, silently. A raw PNG has no importer in a built game |
+| `Image.LoadFromFile("user://x.png")` | Works. It read a 512x384 png |
+| `ImageTexture.CreateFromImage(image)` | Works. It returns a usable `Texture2D` |
+| Harmony postfix on the `Portrait` getter | Works. The card then reports `Portrait = 512x384` |
+
+Two facts force the last row. `CardModel.PortraitPath` is `virtual`, but `CardModel.Portrait` is
+not, and `Portrait` is what the UI reads. So the path gets you nowhere and the texture has to be
+supplied by a patch.
+
+`reference/example_card/` does this in `PortraitPatch.cs`: it reads `portrait.png` from the mod's
+own directory, caches the texture, and returns it for that one card. `install_mod` copies image
+files next to the assembly, because the assembly reads them from its own directory.
+
+This is a stopgap, not a design. The real fix is a `<id>.pck`, and the art direction is deferred.
+
 ### 6.1 Localization: `res://` accepts only the mod's own PCK
 
 This is the decompiled `ModManager.GetModdedLocTables`:

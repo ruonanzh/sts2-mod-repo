@@ -120,6 +120,8 @@ writeFileSync(
   ),
 );
 writeFileSync(join(modDir, "MyMod.dll"), "fake");
+// 立绘这类图片要跟着装进去：DLL-only 的 mod 没有 res://<id>/ 命名空间，只能从自己目录读。
+writeFileSync(join(modDir, "portrait.png"), "fake-png");
 
 // ── 接住工具回调 ────────────────────────────────────────────────────────────
 const extUrl = pathToFileURL(join(caseRoot, ".pi", "extensions", "mod-install.ts")).href;
@@ -199,6 +201,11 @@ const vendorPlaced = (modsRoot) => existsSync(join(modsRoot, "BaseLib", "BaseLib
   check("no copy anywhere -> the bundled BaseLib is placed", vendorPlaced(modsRoot), text);
   check("...and the report says so", /bundled .*was placed/.test(text), text);
   check("...and the mod itself is installed", existsSync(join(modsRoot, "MyMod", "MyMod.dll")), text);
+  check(
+    "...and an image next to the assembly travels with it",
+    existsSync(join(modsRoot, "MyMod", "portrait.png")),
+    text,
+  );
 }
 
 // ② 玩家从 Workshop 订阅了且版本够 → 什么都不装（这是「不覆盖」的核心）

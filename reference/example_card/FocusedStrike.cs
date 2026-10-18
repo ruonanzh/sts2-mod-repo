@@ -3,6 +3,7 @@ using System.Threading.Tasks;
 using BaseLib.Abstracts;
 using BaseLib.Utils;
 using MegaCrit.Sts2.Core.Entities.Cards;
+using MegaCrit.Sts2.Core.Helpers;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
 using MegaCrit.Sts2.Core.Models.CardPools;
@@ -31,4 +32,17 @@ public class FocusedStrike() : CustomCardModel(1, CardType.Attack, CardRarity.Co
     }
 
     protected override void OnUpgrade() => DynamicVars.Damage.UpgradeValueBy(3m);
+
+    // 卡面：**临时借原版一张图的立绘**。
+    //
+    // 默认路径是 ImageHelper.GetImagePath(
+    //   "atlases/card_atlas.sprites/<池子>/<modid>-<类名小写>.tres")，
+    // 我们没有这个资源，于是游戏打一条 Missing sprite 的 WARN、画占位图。
+    // 卡本身照常能看见、能打 —— 缺图不会让卡隐形。
+    //
+    // 真正的做法是把图片放进 mod 自己的 res:// 命名空间，那要 PCK（wiki 里所有美术
+    // 例子写的都是 `res://<ModRoot>/images/...`）。美术方向暂缓，所以先指一张原版
+    // 卡图：`PortraitPath` 是 virtual，`Portrait` 不是 —— 能覆写的只有路径。
+    // 卡面由 PortraitPatch 在运行期顶掉 Portrait 的返回值（见那个文件开头的说明）。
+    // PortraitPath 保持原版默认：它指向我们带的 .tres，没有就 null，反正会被顶掉。
 }

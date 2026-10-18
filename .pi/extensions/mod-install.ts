@@ -380,6 +380,18 @@ export default function (pi: ExtensionAPI) {
         cpSync(manifest.identity.manifestPath, join(staging, `${id}.json`));
         cpSync(dll, join(staging, `${id}.dll`));
 
+        // Images that a mod loads at runtime from its own directory. A DLL-only mod has no
+        // res://<id>/ namespace, so a texture has to come from a file next to the assembly.
+        for (const entry of readdirSync(modDir, { withFileTypes: true })) {
+          if (!entry.isFile()) continue;
+          if (!/\.(png|jpg|jpeg|webp)$/i.test(entry.name)) continue;
+          try {
+            cpSync(join(modDir, entry.name), join(staging, entry.name));
+          } catch {
+            /* a locked image should not abort the install */
+          }
+        }
+
         // Any other runtime DLLs sitting next to the built assembly are dependencies
         // (a vendored library, a helper). The game resolves them from the mod folder root.
         const dllDir = join(dll, "..");
