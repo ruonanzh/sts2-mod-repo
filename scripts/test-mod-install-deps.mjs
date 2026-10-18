@@ -134,15 +134,21 @@ if (!tool) throw new Error("the extension registered no tool");
 console.log(`(tool: ${tool.name})\n`);
 
 /** 每个用例一套干净的游戏侧目录，并写一次状态（install_mod 只认已记录的路径）。 */
-function setup({ local = null, workshop = null } = {}) {
+function setup({ local = null, nestedLocal = null, workshop = null, modsMissing = false } = {}) {
   const modsRoot = join(caseRoot, "mods");
   const workshopRoot = join(caseRoot, "workshop", "content", "2868840");
   rmSync(modsRoot, { recursive: true, force: true });
   rmSync(join(caseRoot, "workshop"), { recursive: true, force: true });
-  mkdirSync(modsRoot, { recursive: true });
+  // modsMissing：模拟新机器——路径已记录，但目录还不存在（游戏自己不会建）。
+  if (!modsMissing) mkdirSync(modsRoot, { recursive: true });
   mkdirSync(workshopRoot, { recursive: true });
 
-  const put = (root, dirName, version, { bom = false } = {}) => {
+  /**
+   * 放一份 BaseLib。`dirName` 可以是相对路径（`dev/BaseLib`），用来造「藏在子目录里」的情形。
+   * 同时写一个 `MARKER` 文件：判断「有没有被覆盖」只看 `existsSync` 是不够的 —— 覆盖之后
+   * 路径依然存在。标记文件能证明原文件还在。
+   */
+  const put = (root, dirName, version, { bom = false, marker = false } = {}) => {
     const d = join(root, dirName);
     mkdirSync(d, { recursive: true });
     const json = JSON.stringify({ id: "BaseLib", name: "BaseLib", version, has_dll: true, has_pck: true }, null, 2);
@@ -150,15 +156,19 @@ function setup({ local = null, workshop = null } = {}) {
     // 不处理会把这个依赖误判成「不存在」，然后覆盖玩家已经装好的那份。
     writeFileSync(join(d, "BaseLib.json"), bom ? `\uFEFF${json}` : json);
     writeFileSync(join(d, "BaseLib.dll"), "fake");
+    if (marker) writeFileSync(join(d, "MARKER"), "this copy was here first");
+    return d;
   };
-  if (local) put(modsRoot, "BaseLib", local);
+  let localDir = null;
+  if (local) localDir = put(modsRoot, "BaseLib", local, { marker: true });
+  if (nestedLocal) put(modsRoot, join("dev", "BaseLib"), nestedLocal, { marker: true });
   if (workshop) put(workshopRoot, "3737335127", workshop);
 
   writeFileSync(
     join(caseRoot, ".gamer-agent.local.json"),
     JSON.stringify({ modInstallDir: modsRoot, workshopDir: workshopRoot }, null, 2),
   );
-  return { modsRoot, workshopRoot };
+  return { modsRoot, workshopRoot, localDir };
 }
 
 async function runInstall() {
@@ -173,7 +183,14 @@ async function runInstall() {
   return { text, details: out.details };
 }
 
-const vendorPlaced = (modsRoot) => existsSync(join(modsRoot, "BaseLib", "BaseLib.json"));
+/**
+ * 随仓那份有没有被放进去。
+ *
+ * 不能用 `BaseLib.json` 判断：玩家自己那份也长这样，路径照样存在 —— 这正是旧测试
+ * 「没被覆盖」断言失效的原因。随仓那份带 `BaseLib.pck`，测试里造的玩家副本不带，
+ * 所以 `.pck` 才是可靠的判别物。
+ */
+const vendorPlaced = (modsRoot) => existsSync(join(modsRoot, "BaseLib", "BaseLib.pck"));
 
 // ① 玩家一份都没有 → 该把随仓带的那份放进去
 {
@@ -203,10 +220,54 @@ const vendorPlaced = (modsRoot) => existsSync(join(modsRoot, "BaseLib", "BaseLib
 
 // ④ 本地 + Workshop 都有 → 这是唯一会让更新不到达的状态，必须报出来
 {
-  const { modsRoot } = setup({ local: "v3.4.7", workshop: "v3.5.0" });
+  const { modsRoot, localDir } = setup({ local: "v3.4.7", workshop: "v3.5.0" });
   const { text } = await runInstall();
   check("copies in both places -> the duplicate is reported", /exists in both places/.test(text), text);
-  check("...and nothing is overwritten", vendorPlaced(modsRoot), text);
+  check("...the local copy is the one the report names", text.includes(localDir), text);
+  // 内容级：只查 existsSync 是没用的，覆盖之后路径照样存在。
+  check(
+    "...and the local copy is untouched, not replaced",
+    existsSync(join(localDir, "MARKER")),
+    `MARKER is gone from ${localDir}: the bundled copy replaced it`,
+  );
+}
+
+// ⑦ 只有本地一份、版本够 → 什么都不装（这条以前没有，于是「只填空」的回归挡不住）
+{
+  const { modsRoot, localDir } = setup({ local: "v3.4.7" });
+  const { text } = await runInstall();
+  check("a local copy alone -> nothing is copied", !vendorPlaced(modsRoot), text);
+  check("...and the report names the mods directory as the source", /from the mods directory/.test(text), text);
+  check("...and the local copy is untouched", existsSync(join(localDir, "MARKER")), text);
+}
+
+// ⑧ 只有本地一份、版本太旧 → 只报告，不覆盖
+{
+  const { modsRoot, localDir } = setup({ local: "v3.0.0" });
+  const { text } = await runInstall();
+  check("a local copy that is too old -> nothing is copied over it", !vendorPlaced(modsRoot), text);
+  check("...and it says the copy is older than required", /older than the required/.test(text), text);
+  check("...and the local copy is untouched", existsSync(join(localDir, "MARKER")), text);
+}
+
+// ⑨ 依赖藏在子目录里 → 必须能找到（游戏是递归扫 mods 的）
+{
+  const { modsRoot } = setup({ nestedLocal: "v3.4.7" });
+  const { text } = await runInstall();
+  check(
+    "a dependency in a subdirectory is found (the game scans recursively)",
+    !vendorPlaced(modsRoot),
+    `${text}\nThis is the regression that produced DUPLICATE_ID: we missed mods/dev/BaseLib and added a second copy.`,
+  );
+  check("...and it is reported as already installed", /already installed/.test(text), text);
+}
+
+// ⑩ 本地两份 → 必须报重复（游戏先加载一份，另一份 DUPLICATE_ID）
+{
+  const { modsRoot } = setup({ local: "v3.4.7", nestedLocal: "v3.4.7" });
+  const { text } = await runInstall();
+  check("two local copies -> the duplicate is reported", /exists 2 times in the mods directory/.test(text), text);
+  check("...and nothing new is copied", !existsSync(join(modsRoot, "BaseLib", "BaseLib.dll.orig")), text);
 }
 
 // ⑥ manifest 带 UTF-8 BOM（上游原文件就是）→ 仍然要认出这个依赖存在
@@ -222,6 +283,21 @@ const vendorPlaced = (modsRoot) => existsSync(join(modsRoot, "BaseLib", "BaseLib
   const { text } = await runInstall();
   check("a dependency manifest with a UTF-8 BOM is still recognised", !vendorPlaced(modsRoot), text);
   check("...and it is not treated as missing", !/was not installed/.test(text), text);
+}
+
+// ⑪ 记录过路径但目录不存在（新机器第一次装）→ 必须自己建，不能把人踢回 try_set_game_dir
+{
+  const { modsRoot } = setup({ modsMissing: true });
+  check("the mods directory is absent before the call", !existsSync(modsRoot), modsRoot);
+  const { text } = await runInstall();
+  check("a missing mods directory is created", existsSync(modsRoot), text);
+  check("...the report says this tool created it", /this tool created it/.test(text), text);
+  check("...and the mod is installed", existsSync(join(modsRoot, "MyMod", "MyMod.dll")), text);
+  check(
+    "...and the bundled dependency went in, because nothing was present",
+    existsSync(join(modsRoot, "BaseLib", "BaseLib.pck")),
+    text,
+  );
 }
 
 // ⑤ 版本号带前缀也要能比（上游写 v3.4.7，manifest 写 3.4.7）

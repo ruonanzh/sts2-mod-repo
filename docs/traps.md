@@ -206,9 +206,12 @@ reference inside BaseLib. `search` never finds it.
 **Already hit**: That conclusion led to the deletion of the `[Pool]` that BaseLib requires, and then
 the game did not start (trap 14).
 
-**What to do instead**: To find a name, use `action=search`. To decide **whether any code uses it**,
-read that class with `action=decompile`, or read the call site with `action=il`. A 0 hit from
+**What to do instead**: To find a name, use `action=search`. To decide **whether any code uses
+it**, read that class with `action=source` and read the member that calls it. A 0 hit from
 `search` proves only that nothing declares it.
+
+The names `decompile` and `il` belong to the `api-probe` command line, not to `inspect_api`. The
+tool has three actions only: `search`, `members`, and `source`.
 
 ## 14. `[Pool]` is absent: the game does not start, and the error is not in the mod loading stage
 

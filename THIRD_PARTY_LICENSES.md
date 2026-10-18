@@ -19,7 +19,7 @@ The three files in `vendor/baselib/` come from the upstream release `v3.4.7`. `B
 
 **The difference from the three rows above**: the rows above are maintainer tools. The player machine **loads** this group. So the version of this group decides whether the mod runs. At an upgrade you must also read item 9 in `docs/traps.md`, because a local copy overrides a Workshop subscription.
 
-The three files are **byte for byte the same** as upstream. The upstream for the tools is `escape-from-duckov-mod`, which maintains them. The code in `tools/api-probe/` is a direct copy too. The `README.md` in that directory records the deviations at its end.
+The three files are **byte for byte the same** as upstream. The upstream for the tools is `unity-mono-mod`, which duckov maintains, and `tools/api-probe/README.md` records the four local deviations at its end. One row in the table above is not byte-identical to upstream: the BOM was stripped from `BaseLib.json`.
 
 ## Upgrade and check
 

@@ -210,6 +210,17 @@ function handleDependencies(args: {
 
     // Every remaining case leaves the installed copy exactly as it is.
     const res = resolveDependency(spec, ctx);
+    if (action.kind === "warn-duplicate-local") {
+      const locals = res.installations.filter((i) => i.source === "local");
+      const list = locals.map((i) => `${i.version ?? "?"} in ${i.dir}`).join(", ");
+      lines.push(
+        `WARN: ${spec.id} exists ${locals.length} times in the mods directory - ${list}. The game loads the first copy it scans and fails the other with DUPLICATE_ID.`,
+      );
+      blockers.push(
+        `Tell the player to keep one copy and delete the rest, then restart the game. Do not delete anything for them without asking.`,
+      );
+      continue;
+    }
     if (action.kind === "warn-duplicate") {
       const local = res.installations.find((i) => i.source === "local");
       const workshop = res.installations.find((i) => i.source === "workshop");
@@ -296,16 +307,37 @@ export default function (pi: ExtensionAPI) {
         // .app bundle (Contents/MacOS/mods), Windows is <install>/mods.
         modRoot = modInstallDirFor(gameDir, config);
       }
-      if (!modRoot || !existsSync(modRoot)) {
+      if (!modRoot) {
         return {
           content: [
             {
               type: "text",
-              text: `FAIL: the mod install directory is not recorded or does not exist.\nNEXT: run try_set_game_dir first (it derives and records the mods directory), then install again.`,
+              text: `FAIL: the mod install directory is not recorded.\nNEXT: run try_set_game_dir first (it derives and records the mods directory), then install again.`,
             },
           ],
           details: { ok: false, reason: "NO_TARGET" },
         };
+      }
+      // The game never creates its own mods directory, and nothing else here does either.
+      // On a machine that has never had a mod, the recorded path does not exist yet. Refusing
+      // here made the first install a dead end: this tool said "run try_set_game_dir", and that
+      // tool derives the same path again. So create it, and say so.
+      let createdModRoot = false;
+      if (!existsSync(modRoot)) {
+        try {
+          mkdirSync(modRoot, { recursive: true });
+          createdModRoot = true;
+        } catch (error) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `FAIL: the mods directory is missing and could not be created: ${modRoot}\nReason: ${error instanceof Error ? error.message : String(error)}\nNEXT: check that the game directory exists and is writable, then run try_set_game_dir again.`,
+              },
+            ],
+            details: { ok: false, reason: "CANNOT_CREATE_TARGET", detail: String(error) },
+          };
+        }
       }
 
       // Products. The two file names are hard requirements: the loader reads <id>.dll.
@@ -390,6 +422,10 @@ export default function (pi: ExtensionAPI) {
 
       const lines: string[] = [];
       lines.push(`PASS: installed ${id} into ${target}`);
+      if (createdModRoot)
+        lines.push(
+          `NOTE: the mods directory did not exist, so this tool created it. The game does not create it, and a game that has never had a mod does not have it yet.`,
+        );
       if (renamed)
         lines.push(
           `NOTE: the target ${dirName} is used by another mod, so this copy went to ${targetName}. That other mod was not touched.`,

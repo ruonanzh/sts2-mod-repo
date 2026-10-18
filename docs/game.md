@@ -48,7 +48,7 @@ key. A spelling error therefore raises no error, and the key silently does nothi
 | `author` | string | Author. When the mod has no `[ModInitializer]`, the loader also uses it in the Harmony instance name |
 | `description` | string | For display |
 | `version` | string | Semantic version. When parsing fails, `Mod.version` is null and the dependent mod reports FAILED |
-| `has_pck` | bool | If the key is true and the file `.pck` is absent, the load throws an exception |
+| `has_pck` | bool | If the key is true and the file `.pck` is absent, the loader logs an error and continues without the pck. It throws only when a pck exists but Godot cannot load it |
 | `has_dll` | bool | If the key is true and the file `.dll` is absent, the loader logs an error only and does not load the assembly |
 | `dependencies` | `[{id, min_version}]` | If a dependency is absent, the mod reports FAILED. If its version is too low, the mod also reports FAILED |
 | `affects_gameplay` | bool | Defaults to **true**. A wrong value causes a desync in multiplayer, or the game blocks the mod |

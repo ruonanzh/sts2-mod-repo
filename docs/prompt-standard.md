@@ -163,8 +163,16 @@ Keep these verbatim. They are identifiers, not terms.
 The `asd-ste100` skill has a linter. It reports semicolons, long sentences, phrasal verbs,
 empty verbs, synonym rotation, passive voice, and compound tenses.
 
+The script lives in the design repository, not here:
+
 ```sh
-python3 .pi/skills/asd-ste100/scripts/ste-lint.py <file>
+python3 ../desktop-gamer-agent-pi/.pi/skills/asd-ste100/scripts/ste-lint.py <file>
+```
+
+This repository has its own machine check, and the pre-commit hook runs it:
+
+```sh
+node scripts/check-prompt-standard-en.mjs
 ```
 
 Exit code 1 means the file has more hard violations than the baseline. When you adopt an old file

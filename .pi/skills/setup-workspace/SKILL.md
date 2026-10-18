@@ -44,7 +44,7 @@ On macOS, modInstallDir looks like `.../SlayTheSpire2.app/Contents/MacOS/mods`. 
 |---|---|---|
 | `check_runtime` reports an old SDK | The local machine has SDK 8, and the game needs 9 | Run `install_runtime`, install .NET 9 as the guide says, then run `check_runtime` again. |
 | `try_set_game_dir` finds no game | The Steam library is on a non-default disk, or the game is not installed | Ask the player for the install directory, then record it with `set_game_dir`. |
-| `check_game_paths` reports that modInstallDir does not exist | `install_mod` creates the mods directory when it needs it. The game does not create it. | Normal. `install_mod` creates it. |
+| `try_set_game_dir` warns that the mod directory does not exist yet | The game never creates its own mods directory, and a machine that has never had a mod does not have it | Normal. `install_mod` creates it on the first install and says so. `check_game_paths` does not check existence, so it never reports this. |
 | `check_game_paths` reports that the Workshop directory is not recorded | The player subscribes to no mod | Normal. It is an optional reference path. It does not affect mod creation. |
 | The paths return PASS, but the game does not show the mod | The master load switch is off | See the Acceptance section of mod-installer. |
 | The line `API probe built` does not appear | The `tools/api-probe` build failed | The tool writes a WARN and gives the first error line. `inspect_api` is not usable then, but compilation and installation are not affected. |

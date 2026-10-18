@@ -26,8 +26,12 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
 2. Copy the sample directory, then **change all three places that carry the name in one pass**:
 
    ```
-   cp -r reference/example_mod your_mods/<your name>
+   cp -r reference/example_mod/. your_mods/<your name>/
    ```
+
+   The `/.` matters. `cp -r reference/example_mod your_mods/<name>` copies the directory
+   **into** the target when the target already exists, which gives
+   `your_mods/<name>/example_mod/`. `validate_mod` then reports no manifest.
 
    | Where to change | New value |
    |---|---|
@@ -52,7 +56,7 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
    | Key | The rule in this repository |
    |---|---|
    | `has_dll` | Must be `true` |
-   | `has_pck` | v1 must be `false`. If you write `true` and the build produces no `.pck`, the load throws an exception. |
+   | `has_pck` | v1 must be `false`. If you write `true` and the build produces no `.pck`, the loader logs an error and loads the mod without its assets. The mod then looks installed but its resources are absent. |
    | `version` | Must be `x.y.z`. If parsing fails, every mod that depends on it fails. |
    | `min_game_version` | Write the local version (currently `0.107.1`). If you leave it out, you get a WARN only. |
    | `affects_gameplay` | Write `true` when you change game logic, and `false` for appearance only. A wrong value causes a multiplayer desync. |

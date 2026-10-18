@@ -12,7 +12,7 @@ Every game fact comes from a direct test or from decompilation. The source is in
 | Engine | Godot 4.5.1 (MegaCrit's own build, `MegaDot`) plus C# `net9.0`. The game ships .NET 9.0.7 itself. |
 | Build | The build needs the .NET **9** SDK (`net9.0`). SDK 8 fails with `NETSDK1045`. |
 | mods directory | macOS: `SlayTheSpire2.app/Contents/MacOS/mods/`. Windows: `<game directory>/mods/`. |
-| Startup | **The game must start through Steam.** To pass an argument, run `open "steam://rungameid/2868840//-nomods"`. |
+| Startup | **The game must start through Steam.** To pass an argument, put it after `//`, for example `open "steam://rungameid/2868840//--verbose"`. `-nomods` is a debug switch: it turns every mod off, so it never proves that a mod loads. |
 
 ## What a mod is (one directory and two files with the same name)
 
@@ -32,7 +32,9 @@ The entry point is a `[ModInitializer("method name")]` attribute on a type. The 
 - `reference/example_mod/`: the starting point for a new mod. After you copy it, change three names. These are the `AssemblyName` in the csproj, the namespace in `Entry.cs`, and the `id` in `<name>.json`. The three names must match.
 - `.pi/lib/`: the criteria (**single source of truth**). `game-paths.ts` holds the paths. `dotnet.ts` holds the SDK. `game-settings.ts` holds the mod loading switch. `mod-identity.ts` holds the manifest rules.
 - `.pi/extensions/`: the tools. A game class name or a game directory name **must not** appear here. Everything goes through `mod-repo.json`.
-- `docs/`: the game's own mechanics, paths, and traps.
+- `.pi/skills/`: the three procedures. `setup-workspace` gets the machine ready. `mod-creator` makes a mod, and its first step reads the wiki index. `mod-installer` puts a mod into the game and proves it loaded.
+- `docs/`: the game's own mechanics, paths, and traps. Start at `docs/INDEX.md`, then read `docs/traps.md` before you debug anything.
+- `reference/base-lib-wiki/`: a verbatim snapshot of the BaseLib wiki. `INDEX.md` inside it maps a player request to the page that explains it.
 - `mod-repo.json`: the only contract file (constants, no criteria).
 
 ## The 8 questions to answer before onboarding (the StS2 answers)

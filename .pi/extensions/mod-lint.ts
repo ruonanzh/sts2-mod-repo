@@ -161,7 +161,7 @@ export default function (pi: ExtensionAPI) {
           errors.push('has_dll must be true. Without it the loader never loads the assembly');
         if (manifestData.has_pck === true)
           errors.push(
-            "has_pck is true, but this repo builds DLL-only mods. Either ship the .pck or set has_pck to false; a declared but missing .pck makes the loader throw",
+            "has_pck is true, but this repo builds DLL-only mods. Either ship the .pck or set has_pck to false. A declared but missing .pck makes the loader log an error and load the mod without its assets.",
           );
 
         // 4. version must parse as semantic version. Mod.version is null otherwise, and any

@@ -18,6 +18,9 @@ import { join } from "node:path";
 
 export type DepSource = "local" | "workshop";
 
+/** 扫描深度上限。游戏的 mods 目录实际只有一两层，这个值只为防异常树。 */
+const MAX_DEPTH = 5;
+
 export interface DepSpec {
   id: string;
   /** manifest 里声明的 `dependencies[].min_version`；没写就是 null（不卡版本） */
@@ -136,38 +139,62 @@ function safeReaddir(dir: string): string[] {
   }
 }
 
-/** 本地装的那份：`<modRoot>/<任意目录>/<id>.json`。可能有多个目录（历史遗留），全收。 */
-function findLocal(modRoot: string | null, id: string): DepInstall[] {
-  if (!modRoot || !existsSync(modRoot)) return [];
+/**
+ * 扫一个目录树，找出 id 对得上的 mod。
+ *
+ * **必须递归。** 游戏的 `ModManager.ReadModsInDirRecursive` 是递归扫 `mods/` 的，
+ * 所以 `mods/dev/BaseLib` 是能被加载的。只看一层的话，我们会把一个玩家已经装好的依赖
+ * 判成「没有」，于是再放一份进去 —— 结果是 `DUPLICATE_ID`，两份都留着。
+ *
+ * 跳过以 `.` 开头的目录：那是我们自己的中转目录（`.staging-*`），不是 mod。
+ * `depth` 上限防住符号链接成环或异常深的树。
+ */
+function findModInTree(
+  root: string,
+  id: string,
+  source: DepSource,
+  depth = 0,
+): DepInstall[] {
+  if (depth > MAX_DEPTH) return [];
   const out: DepInstall[] = [];
-  for (const entry of safeReaddir(modRoot)) {
-    const dir = join(modRoot, entry);
+  for (const entry of safeReaddir(root)) {
+    if (entry.startsWith(".")) continue;
+    const dir = join(root, entry);
     try {
       if (!statSync(dir).isDirectory()) continue;
     } catch {
       continue;
     }
     const m = readManifestIn(dir, id);
-    if (m) out.push({ source: "local", dir, version: m.version });
+    // 一个目录只算一份。游戏也是这么做的：一个目录一个 manifest。
+    if (m) out.push({ source, dir, version: m.version });
+    // 继续往下找：同一个 mod 可能被放在更深的子目录里，也可能真有两份。
+    out.push(...findModInTree(dir, id, source, depth + 1));
   }
   return out;
+}
+
+/** 本地装的那份：`<mods directory>` 下的任意深度。 */
+function findLocal(modRoot: string | null, id: string): DepInstall[] {
+  if (!modRoot || !existsSync(modRoot)) return [];
+  return findModInTree(modRoot, id, "local");
 }
 
 /** Workshop 订阅的那份：`<workshopDir>/<publishedFileId>/`（目录名是数字 id，不是 mod id）。 */
 function findWorkshop(workshopDir: string | null, id: string): DepInstall[] {
   if (!workshopDir || !existsSync(workshopDir)) return [];
-  const out: DepInstall[] = [];
-  for (const entry of safeReaddir(workshopDir)) {
-    const dir = join(workshopDir, entry);
-    try {
-      if (!statSync(dir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    const m = readManifestIn(dir, id);
-    if (m) out.push({ source: "workshop", dir, version: m.version });
-  }
-  return out;
+  return findModInTree(workshopDir, id, "workshop");
+}
+
+/** 版本比较用的最大值：取高，不取先找到的那份。读不出版本的排最后。 */
+function highest(installs: DepInstall[]): DepInstall | null {
+  if (!installs.length) return null;
+  return installs.reduce((best, cur) => {
+    if (!best.version) return cur.version ? cur : best;
+    if (!cur.version) return best;
+    const cmp = compareVersions(cur.version, best.version);
+    return cmp !== null && cmp > 0 ? cur : best;
+  });
 }
 
 export interface ResolveContext {
@@ -179,13 +206,14 @@ export interface ResolveContext {
 
 /** 把一条依赖解析成「装了几份、从哪来、版本够不够」。 */
 export function resolveDependency(spec: DepSpec, ctx: ResolveContext): DepResolution {
-  const installations = [...findLocal(ctx.modRoot, spec.id), ...findWorkshop(ctx.workshopDir, spec.id)];
-  // 多份时取最熟悉的那份（本地优先，与游戏加载器一致）来判断版本是否达标
-  const shown = installations.find((i) => i.source === "local") ?? installations[0] ?? null;
+  const local = findLocal(ctx.modRoot, spec.id);
+  const workshop = findWorkshop(ctx.workshopDir, spec.id);
+  const installations = [...local, ...workshop];
+  // 谁决定生效版本：本地优先（与加载器一致），本地内部取最高。
+  // 只取「先找到的那份」会让结果依赖目录顺序，同一个机器两次跑出不同结论。
+  const effective = highest(local) ?? highest(workshop);
   const satisfies =
-    !spec.minVersion || !shown
-      ? null
-      : compareVersions(shown.version, spec.minVersion);
+    !spec.minVersion || !effective ? null : compareVersions(effective.version, spec.minVersion);
   return {
     spec,
     installations,
@@ -198,6 +226,7 @@ export type DepAction =
   | { kind: "install-bundled" } // 一份都没有 → 允许落我们随仓带的那份
   | { kind: "warn-too-old" } // 有，但低于 min_version → 不覆盖，让玩家升级
   | { kind: "warn-duplicate" } // 本地 + Workshop 都有 → 本地会盖掉 Workshop，提示删本地
+  | { kind: "warn-duplicate-local" } // 本地有两份 → 先加载的那份赢，另一份报 DUPLICATE_ID
   | { kind: "warn-unknown-version" }; // 有，但读不出版本 → 不判断，提示确认
 
 /**
@@ -206,10 +235,12 @@ export type DepAction =
 export function decideDependencyAction(res: DepResolution): DepAction {
   const { installations, satisfies, spec } = res;
   if (installations.length === 0) return { kind: "install-bundled" };
-  const hasLocal = installations.some((i) => i.source === "local");
+  const locals = installations.filter((i) => i.source === "local");
   const hasWorkshop = installations.some((i) => i.source === "workshop");
   // 重复优先报：这是唯一会让玩家「更新了却没生效」的状态。
-  if (hasLocal && hasWorkshop) return { kind: "warn-duplicate" };
+  if (locals.length && hasWorkshop) return { kind: "warn-duplicate" };
+  // 两份本地副本：游戏按扫描顺序先加载一份，另一份在 ModelDb 里撞 id → DUPLICATE_ID。
+  if (locals.length > 1) return { kind: "warn-duplicate-local" };
   if (satisfies === false) return { kind: "warn-too-old" };
   if (satisfies === null && spec.minVersion) return { kind: "warn-unknown-version" };
   return { kind: "ok" };
