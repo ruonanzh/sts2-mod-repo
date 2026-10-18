@@ -272,6 +272,10 @@ A vanilla Ironclad pool has 87 cards. Measured output for `reference/example_car
 That output proves registration, pool membership, and the localisation. It also proves the card
 will not be in the first hand.
 
+**A card with no portrait is not invisible.** The game logs one `AtlasResourceLoader: Missing
+sprite` WARN and draws a placeholder. The sprite key is `<pool title>/<mod id>-<class name>` in
+lowercase, and `docs/game.md` section 6 shows the exact request line.
+
 **Fix**: if the player must see the card immediately, append it to the starting deck with a Harmony
 postfix on the getter. `reference/example_card/StartingDeckPatch.cs` does exactly that, and
 `Ironclad.StartingDeck` returns `IEnumerable<CardModel>`, so the postfix appends one card and leaves

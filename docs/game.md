@@ -122,6 +122,18 @@ the sibling directory at the same level.
 - The usual approach in the ecosystem to change a vanilla card image is to patch the getter of
   `CardModel.PortraitPath`. That patch must carry `[HarmonyPriority(Priority.First)]`. BaseLib,
   RitsuLib, and ATA all prefix the same getter.
+- **Where a mod card's portrait is looked up** (measured, not documented upstream). A card named
+  `FocusedStrike` in mod `ExampleCard` inside the Ironclad pool makes the game request:
+
+  ```
+  [WARN] AtlasResourceLoader: Missing sprite 'ironclad/examplecard-focused_strike' in card_atlas
+         (requested: res://images/atlases/card_atlas.sprites/ironclad/examplecard-focused_strike.tres)
+  ```
+
+  So the key is `<pool title>/<mod id>-<class name>`, lowercased, with underscores between words.
+  The file it looks for is a `.tres` under `card_atlas.sprites/<pool title>/`. A mod card without
+  that sprite still loads and still works. It shows a missing-atlas placeholder, and the game logs
+  one WARN per sprite.
 
 ### 6.1 Localization: `res://` accepts only the mod's own PCK
 
