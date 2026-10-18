@@ -17,7 +17,13 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
 
 ## 2. Steps
 
-1. Copy the sample directory, then **change all three places that carry the name in one pass**:
+1. Read `reference/base-lib-wiki/INDEX.md` first. Compare the player's request with the table of
+   tasks, and read the one or two pages that it names. Do not page through the snapshot.
+
+   The wiki is a snapshot of the upstream documentation. It shows how the author expects the code
+   to look, and it lists the topics that it does not cover at all. Step 5 queries the real names.
+
+2. Copy the sample directory, then **change all three places that carry the name in one pass**:
 
    ```
    cp -r reference/example_mod your_mods/<your name>
@@ -31,7 +37,7 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
 
    The three places must match exactly. The loader reads the assembly as `<id>.dll`. If the file name and the id differ, it does not load the mod, and it reports no error.
 
-2. Write or change the entry point. The entry method is static and takes no parameters:
+3. Write or change the entry point. The entry method is static and takes no parameters:
 
    ```csharp
    [ModInitializer(nameof(Init))]
@@ -41,7 +47,7 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
    }
    ```
 
-3. Write the manifest. The manifest accepts only these 10 keys: `id`, `name`, `author`, `description`, `version`, `has_pck`, `has_dll`, `dependencies`, `affects_gameplay`, `min_game_version`.
+4. Write the manifest. The manifest accepts only these 10 keys: `id`, `name`, `author`, `description`, `version`, `has_pck`, `has_dll`, `dependencies`, `affects_gameplay`, `min_game_version`.
 
    | Key | The rule in this repository |
    |---|---|
@@ -50,12 +56,12 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
    | `version` | Must be `x.y.z`. If parsing fails, every mod that depends on it fails. |
    | `min_game_version` | Write the local version (currently `0.107.1`). If you leave it out, you get a WARN only. |
    | `affects_gameplay` | Write `true` when you change game logic, and `false` for appearance only. A wrong value causes a multiplayer desync. |
-   | `dependencies` | When you use BaseLib, write `[{"id":"BaseLib","min_version":"3.3.0"}]`. |
+   | `dependencies` | When you use BaseLib, write `[{"id":"BaseLib","min_version":"3.4.7"}]`. This is the version in `vendor/baselib`. A lower number works only when your code calls nothing new. |
 
    **The directory must hold one `.json` file only.** The loader reads every `.json` file as a manifest.
 
-4. Before you use a game API, query the name first. Do not work from memory. Run `inspect_api action=search query=<substring>`, then read the source with `action=source typeName=<full name>`.
-5. Compile and validate: `validate_mod modDir=your_mods/<your name>`.
+5. Before you use a game API, query the name first. Do not work from memory. Run `inspect_api action=search query=<substring>`, then read the source with `action=source typeName=<full name>`. The wiki gives the shape of the code. It does not prove a type or a member name.
+6. Compile and validate: `validate_mod modDir=your_mods/<your name>`.
 
 ## 3. Acceptance
 
