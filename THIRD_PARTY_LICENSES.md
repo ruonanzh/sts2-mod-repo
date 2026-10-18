@@ -1,31 +1,31 @@
-# 第三方组件与许可
+# Third-party components and licenses
 
-这个仓库入库（git 跟踪）的第三方二进制。**全部为 MIT。**
+Third-party binaries that this repository tracks in git. **All of them are MIT.**
 
-游戏自带的 DLL（`sts2.dll`、`0Harmony.dll`）**不在本表**：它们是编译期引用（`<Private>false</Private>`），既不随仓也不随 mod 分发，玩家机器上本来就有。
+The DLL files that the game ships are `sts2.dll` and `0Harmony.dll`. They are **not in this table**. They are compile-time references (`<Private>false</Private>`). This repository does not ship them and the mod does not ship them. The player machine already has them.
 
-## 清单一览
+## The list
 
-| 文件 | 组件 | 版本 | 许可 | 用途 | 随 mod 分发 |
+| File | Component | Version | License | Purpose | Shipped with the mod |
 |---|---|---|---|---|---|
-| `tools/api-probe/lib/ICSharpCode.Decompiler.dll` | [ICSharpCode.Decompiler](https://github.com/icsharpcode/ILSpy)（ILSpy） | **11.1.0.9782** | MIT | 反编译 C#：`inspect_api` 的 `search` / `members` / `source` 全部由它读程序集，`docs/` 里的结论也来自它 | 否（维护者工具） |
-| `tools/api-probe/lib/System.Reflection.Metadata.dll` | System.Reflection.Metadata | **9.0.0.0** | MIT | 上者的依赖 | 否 |
-| `tools/api-probe/lib/System.Collections.Immutable.dll` | System.Collections.Immutable | **9.0.0.0** | MIT | 上者的依赖 | 否 |
-| `vendor/baselib/BaseLib.dll` | [BaseLib](https://github.com/Alchyr/BaseLib-StS2)（Alchyr） | **3.4.7** | MIT | 内容 mod 的运行时依赖。`install_mod` 在玩家**一份都没有**时才把它放进游戏的 mods 目录 | **是**（运行时加载） |
-| `vendor/baselib/BaseLib.pck` | 同上 | **3.4.7** | MIT | 同上（本地化表在 pck 里，DLL 单独放不带文案） | **是** |
-| `vendor/baselib/BaseLib.json` | 同上 | **3.4.7** | MIT | 游戏的 mod manifest。上游原文件带 UTF-8 BOM，入库那份**去掉了 BOM**（Node 的 `JSON.parse` 不收 BOM），其余字节相同 | **是** |
+| `tools/api-probe/lib/ICSharpCode.Decompiler.dll` | [ICSharpCode.Decompiler](https://github.com/icsharpcode/ILSpy) (ILSpy) | **11.1.0.9782** | MIT | Decompiles C#. All the `search`, `members`, and `source` actions of `inspect_api` read the assembly through it. The conclusions in `docs/` also come from it. | No (maintainer tool) |
+| `tools/api-probe/lib/System.Reflection.Metadata.dll` | System.Reflection.Metadata | **9.0.0.0** | MIT | A dependency of the component above | No |
+| `tools/api-probe/lib/System.Collections.Immutable.dll` | System.Collections.Immutable | **9.0.0.0** | MIT | A dependency of the component above | No |
+| `vendor/baselib/BaseLib.dll` | [BaseLib](https://github.com/Alchyr/BaseLib-StS2) (Alchyr) | **3.4.7** | MIT | The runtime dependency of a content mod. `install_mod` installs it into the mods directory of the game only when the player has **no copy at all**. | **Yes** (loaded at runtime) |
+| `vendor/baselib/BaseLib.pck` | The same as above | **3.4.7** | MIT | The same as above. The localization tables are in the pck, so a DLL alone carries no strings. | **Yes** |
+| `vendor/baselib/BaseLib.json` | The same as above | **3.4.7** | MIT | The mod manifest of the game. The upstream file has a UTF-8 BOM and the copy in this repository has **no BOM**, because Node `JSON.parse` rejects a BOM. All other bytes are the same. | **Yes** |
 
-`vendor/baselib/` 的三个文件来自上游 release `v3.4.7`。`BaseLib.dll` 与 `BaseLib.pck` 与上游**字节相同**（`sha256(BaseLib.dll)` 前 16 位 `55863ca6adc30a61`）。另附 `LICENSE.txt`（上游原文），只随仓库、不进 mod 安装目录。
+The three files in `vendor/baselib/` come from the upstream release `v3.4.7`. `BaseLib.dll` and `BaseLib.pck` are **byte for byte the same** as upstream. The first 16 characters of `sha256(BaseLib.dll)` are `55863ca6adc30a61`. The directory also holds `LICENSE.txt`, which is the upstream text. That file ships with the repository only and does not go into the mod install directory.
 
-**这一组与上面三个的区别**：上面是维护者工具，这一组会被**玩家机器加载**。所以它的版本直接决定 mod 能不能跑，升级时必须同时看 `docs/traps.md` 第 9 条（本地副本会盖掉 Workshop 订阅）。
+**The difference from the three rows above**: the rows above are maintainer tools. The player machine **loads** this group. So the version of this group decides whether the mod runs. At an upgrade you must also read item 9 in `docs/traps.md`, because a local copy overrides a Workshop subscription.
 
-三个文件与上游（`escape-from-duckov-mod`，工具维护方）**字节相同**。`tools/api-probe/` 的代码也是原样复制，见该目录 `README.md` 末尾的偏离记录。
+The three files are **byte for byte the same** as upstream. The upstream for the tools is `escape-from-duckov-mod`, which maintains them. The code in `tools/api-probe/` is a direct copy too. The `README.md` in that directory records the deviations at its end.
 
-## 升级与核对
+## Upgrade and check
 
-升级任何一个 DLL 时**连版本一起改本表**。版本读法（**不执行**被读的代码），两条路任选：
+When you upgrade a DLL, **change the version in this table too**. To read the version, do **not** run the code. There are two ways and you can use either one.
 
-**FileVersion**（`strings` 直接能读，跨平台）：
+**FileVersion** (`strings` reads it directly and it works on both platforms):
 
 ```bash
 strings -a tools/api-probe/lib/System.Reflection.Metadata.dll \
@@ -33,7 +33,7 @@ strings -a tools/api-probe/lib/System.Reflection.Metadata.dll \
 # 4.0.0.0  9.0.24.52809
 ```
 
-**AssemblyVersion**（本表记录的是这个；在程序集元数据里以 UTF-16 存放，`strings` 默认读不到）：
+**AssemblyVersion** (this table records this value. The assembly metadata stores it as UTF-16 and `strings` does not read it by default):
 
 ```bash
 python3 -c "
@@ -44,21 +44,21 @@ print(sorted(set(re.findall(r'\b\d+\.\d+\.\d+\.\d+\b', d)))[:4])
 # ['9.0.0.0', '9.0.24.52809']
 ```
 
-读数时的两个坑：
+Two traps when you read the value:
 
-- `ICSharpCode.Decompiler.dll` 里同时存在多个数字串（`2.0.0.0`、`4.0.0.0` 等是它的依赖版本）。代表本组件的是 **`11.1.0.9782`**。
-- `System.*` 两个是 AssemblyVersion `9.0.0.0`、FileVersion `9.0.24.52809`。**两个都别写成 `8.x`**——这里踩过一次。
+- `ICSharpCode.Decompiler.dll` holds more than one number string. For example, `2.0.0.0` and `4.0.0.0` are versions of its dependencies. The value for this component is **`11.1.0.9782`**.
+- The two `System.*` files have AssemblyVersion `9.0.0.0` and FileVersion `9.0.24.52809`. **Do not write `8.x` for either one.** We made that mistake here once.
 
-## 已知注意
+## Known cautions
 
-- 这个仓库**没有自己的 LICENSE 文件**（默认保留所有权利）。下面的第三方许可只覆盖上表那些文件本身。
-- **不得**把 LGPL 或其它传染性许可的库直接编进 mod：本仓库的 mod 产物是一个 DLL，混入之后整个产物都要按该许可分发。
-- `tools/api-probe/lib/` 下的 DLL 只在**构建 `tools/api-probe`** 时被链接，从不被游戏加载，也从不进入 mod 安装目录。
-- `vendor/baselib/` 下的文件**会**进入玩家的 mod 安装目录，但只在玩家没有任何一份 BaseLib 时。已经有一份时 `install_mod` 不动它。
+- This repository **has no `LICENSE` file of its own**, so the default is that all rights are reserved. The third-party licenses below cover the files in the table above only.
+- Do **not** compile a library that has the LGPL or another copyleft license into the mod. The mod output of this repository is one DLL. If you mix such a library in, the whole output must ship under that license.
+- The linker uses the DLL files in `tools/api-probe/lib/` only when it **builds `tools/api-probe`**. The game never loads them and they never go into the mod install directory.
+- The files in `vendor/baselib/` **do** go into the mod install directory of the player. That happens only when the player has no copy of BaseLib. If a copy exists, `install_mod` does not touch it.
 
-## MIT 许可全文
+## The full MIT license text
 
-以下适用于上表所有组件。
+This text applies to all the components in the table above.
 
 ```
 MIT license
@@ -82,9 +82,9 @@ OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
 DEALINGS IN THE SOFTWARE.
 ```
 
-组件各自的版权行：
+The copyright line of each component:
 
-| 组件 | 版权 |
+| Component | Copyright |
 |---|---|
-| ICSharpCode.Decompiler | `Copyright (c) 2011-2025 AlphaSierraPapa for the ILSpy team`（取自 <https://github.com/icsharpcode/ILSpy>/LICENSE，2026-10-18 抓取） |
-| System.Reflection.Metadata / System.Collections.Immutable | `Copyright (c) .NET Foundation and Contributors`（<https://github.com/dotnet/runtime>） |
+| ICSharpCode.Decompiler | `Copyright (c) 2011-2025 AlphaSierraPapa for the ILSpy team`. Taken from <https://github.com/icsharpcode/ILSpy>/LICENSE on 2026-10-18. |
+| System.Reflection.Metadata / System.Collections.Immutable | `Copyright (c) .NET Foundation and Contributors` (<https://github.com/dotnet/runtime>) |

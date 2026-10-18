@@ -1,50 +1,50 @@
 ---
 name: setup-workspace
-description: 第一次在本工作区工作时用，例如工具说路径没记录、SDK 没装、或玩家问「环境准备好了吗」。也用于换机器后重新就位。不适用：写 mod（见 mod-creator）、把 mod 装进游戏（见 mod-installer）。
+description: 'Use on the first session in this workspace. Read it when a tool says a path is not recorded, or the SDK is not installed. Read it also when the player asks "is the environment ready". Use it after a machine change. Not for: writing a mod (see mod-creator), or installing a mod into the game (see mod-installer).'
 ---
 
-# 让工作区就位
+# Get the workspace ready
 
-**目标**：把「能编译、能安装」的前置条件逐个确认好。每个前置都有专用工具，不得跳步，也不得一次问玩家一堆问题。
+**Goal**: Check each prerequisite for compiling and installing, one by one. Every prerequisite has its own tool. Do not skip a step. Do not ask the player a pile of questions at one time.
 
-## 1. 需要的输入
+## 1. Required input
 
-只有一项需要问玩家：游戏装在哪。默认先自己找，找不到再问。
+One item needs the player: the game directory. Find it yourself first. Ask only when the search fails.
 
-| 项 | 默认 |
+| Item | Default |
 |---|---|
-| 游戏目录 | 先跑 `try_set_game_dir`（无参）。它会扫 Steam 库并验证；失败时才请玩家给出路径 |
-| .NET SDK | 不问玩家。`check_runtime` 会查 |
-| mod 加载开关 | 不问玩家。`install_mod` 会报 |
+| Game directory | Run `try_set_game_dir` with no arguments first. It scans the Steam libraries and checks the result. Ask the player for the path only when it fails. |
+| .NET SDK | Do not ask the player. `check_runtime` checks it. |
+| Mod load switch | Do not ask the player. `install_mod` reports it. |
 
-## 2. 做
+## 2. Steps
 
-按顺序四步，每步看到 PASS 才进下一步。
+Do the four steps in order. Go to the next step only after you see PASS.
 
-1. `check_runtime`（无参）。要求 .NET 9 SDK。返回 FAIL 时跑 `install_runtime` 拿安装指引，装完再跑一次 `check_runtime`。
-   为什么是 9：游戏用 `net9.0`，SDK 8 会在编译时报 `NETSDK1045`。出处：`mod-repo.json` 的 `compile.sdkMajor`，以及本机实测。
-   同一步还会**构建仓库自带的 API 探针**（`tools/api-probe`）。反编译器是随仓的 `ICSharpCode.Decompiler.dll`（见 `THIRD_PARTY_LICENSES.md`），csproj 里零 PackageReference，所以这次构建**不需要联网**。不构建它，`inspect_api` 会表现得像工具坏了。
-2. `try_set_game_dir`（无参）。它做三件事：发现游戏目录、派生 mod 目录与数据目录、写进 `.gamer-agent.local.json`。
-3. `check_game_paths`（无参）。只读校验上一步记下的路径。全部 PASS 才算就位。
-4. 只在要编译时：确认 `validate_mod` 能跑（见 mod-creator）。
+1. Run `check_runtime` with no arguments. It requires the .NET 9 SDK. If it returns FAIL, run `install_runtime` for the install guide, then run `check_runtime` again after the install.
+   Why 9: the game uses `net9.0`, and SDK 8 reports `NETSDK1045` at compile time. Source: `compile.sdkMajor` in `mod-repo.json`, and a local measurement.
+   The same step also **builds the API probe that ships with this repository** (`tools/api-probe`). The decompiler is the bundled `ICSharpCode.Decompiler.dll` (see `THIRD_PARTY_LICENSES.md`). The csproj holds zero PackageReference, so this build **needs no network**. If the probe is not built, `inspect_api` behaves as if the tool were broken.
+2. Run `try_set_game_dir` with no arguments. It does three things: it finds the game directory, it derives the mod directory and the data directory, and it writes them into `.gamer-agent.local.json`.
+3. Run `check_game_paths` with no arguments. It only checks the paths recorded in the previous step, and it writes nothing. The workspace is ready only when all of them return PASS.
+4. Only when you need to compile: check that `validate_mod` runs (see mod-creator).
 
-`install_runtime` 只给指引，不执行安装。需要玩家自己确认时才用。
+`install_runtime` gives the guide only. It does not run the install. Use it only when the player must decide.
 
-## 3. 验收
+## 3. Acceptance
 
-- `check_runtime` 返回 PASS 且报出 dotnet 版本。
-- `try_set_game_dir` 报出 gameDir 与 modInstallDir 两条路径。
-- `check_game_paths` 对 gameDir 与 modInstallDir 都返回 PASS。
+- `check_runtime` returns PASS and reports the dotnet version.
+- `try_set_game_dir` reports two paths, gameDir and modInstallDir.
+- `check_game_paths` returns PASS for both gameDir and modInstallDir.
 
-macOS 上 modInstallDir 形如 `.../SlayTheSpire2.app/Contents/MacOS/mods`。它确实在 `.app` 包内，这是游戏的规定，不是配置错误。出处：反编译 `ModManager.Initialize` 取 `Path.GetDirectoryName(OS.GetExecutablePath())` 再拼 `mods`。
+On macOS, modInstallDir looks like `.../SlayTheSpire2.app/Contents/MacOS/mods`. It is inside the `.app` bundle, as the game requires. This is not a configuration error. Source: the decompiled `ModManager.Initialize` takes `Path.GetDirectoryName(OS.GetExecutablePath())` and joins `mods` to it.
 
-## 4. 常见错误
+## 4. Common errors
 
-| 现象 | 原因 | 处理 |
+| Symptom | Cause | Action |
 |---|---|---|
-| `check_runtime` 报 SDK 太旧 | 本机原有 SDK 8，游戏要 9 | 跑 `install_runtime` 按指引装 .NET 9，然后重跑 `check_runtime` |
-| `try_set_game_dir` 找不到游戏 | Steam 库在非默认盘，或游戏没装 | 请玩家给出安装目录，再用 `set_game_dir` 记录 |
-| `check_game_paths` 报 modInstallDir 不存在 | mods 目录需要时创建，游戏不会建 | 正常。`install_mod` 会创建它 |
-| `check_game_paths` 报 Workshop 目录没记录 | 玩家没订阅任何 mod | 正常，可选参考路径。不影响做 mod |
-| 路径 PASS 但游戏里看不到 mod | 加载总开关是关闭的 | 见 mod-installer 的验收段 |
-| `API probe built` 这句话没出现 | `tools/api-probe` 构建失败 | 会写 WARN 并给出第一行错误。此时 `inspect_api` 不可用，但编译与安装 mod 不受影响 |
+| `check_runtime` reports an old SDK | The local machine has SDK 8, and the game needs 9 | Run `install_runtime`, install .NET 9 as the guide says, then run `check_runtime` again. |
+| `try_set_game_dir` finds no game | The Steam library is on a non-default disk, or the game is not installed | Ask the player for the install directory, then record it with `set_game_dir`. |
+| `check_game_paths` reports that modInstallDir does not exist | `install_mod` creates the mods directory when it needs it. The game does not create it. | Normal. `install_mod` creates it. |
+| `check_game_paths` reports that the Workshop directory is not recorded | The player subscribes to no mod | Normal. It is an optional reference path. It does not affect mod creation. |
+| The paths return PASS, but the game does not show the mod | The master load switch is off | See the Acceptance section of mod-installer. |
+| The line `API probe built` does not appear | The `tools/api-probe` build failed | The tool writes a WARN and gives the first error line. `inspect_api` is not usable then, but compilation and installation are not affected. |

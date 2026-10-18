@@ -1,53 +1,53 @@
 ---
 name: mod-installer
-description: 玩家说「装进游戏」「我要试一下」「装好了吗」时用。覆盖复制产物、确认加载开关、重启游戏、看日志确认。不适用：还没编译过的 mod（先见 mod-creator）、环境路径还没记录（先见 setup-workspace）。
+description: 'Use when the player says "install it into the game", "I want to try it", or "is it installed yet". Covers copying the artifact, checking the load switch, restarting the game, and checking the log for proof. Not for: a mod that is not compiled yet (see mod-creator first), or environment paths that are not recorded yet (see setup-workspace first).'
 ---
 
-# 把 mod 装进游戏
+# Install a mod into the game
 
-**目标**：让 mod 真的被游戏加载，并且用日志证明它加载了。这一步不等同于「文件复制成功」。
+**Goal**: Make the game load the mod, and prove the load with the log. This step is not the same as a successful file copy.
 
-## 1. 需要的输入
+## 1. Required input
 
-只有一项：装哪个 mod（`your_mods/` 下的目录名）。路径从状态文件来，不问玩家。
+One item only: which mod to install, the directory name under `your_mods/`. The paths come from the state file. Do not ask the player.
 
-## 2. 做
+## 2. Steps
 
-1. `install_mod modDir=your_mods/<名字>`。它会把 `<id>.json` 与 `<id>.dll` 复制到游戏 mods 目录下自己的子目录。
-2. 读返回里的 `mods_enabled`：
+1. Run `install_mod modDir=your_mods/<name>`. It copies `<id>.json` and `<id>.dll` into their own subdirectory of the mods directory.
+2. Read `mods_enabled` in the result:
 
-   | 值 | 含义 | 下一步 |
+   | Value | Meaning | Next step |
    |---|---|---|
-   | `true` | 会加载 | 直接重启游戏 |
-   | `false` | 总开关关着，所有 mod 都会被判 Disabled，而且**不报错** | 告诉玩家去游戏内的 Mod Settings 打开，再重启 |
-   | 读不到 | 玩家还没进过游戏，或存档路径不同 | 让玩家重启游戏后看日志；看不到 mod 时再回来查开关 |
+   | `true` | The mod loads | Restart the game now. |
+   | `false` | The master switch is off. Every mod becomes Disabled, and the game **reports no error**. | Tell the player to turn it on in Mod Settings in the game, then restart. |
+   | Not readable | The player has not started the game yet, or the save path differs. | Ask the player to restart the game, then read the log. If the mod does not appear, come back and check the switch. |
 
-   为什么单独报这个：加载器在 `PlayerAgreedToModLoading` 为 false 时直接 `mod_states = Disabled`，日志只有 `Skipping loading mod <id>, user has not yet seen the mods warning`。字段在存档里的名字是 `mods_enabled`。
-3. 重启游戏。新装上的 mod 只在启动时被发现，运行中装进去不会被加载。
-4. 带启动参数时走 Steam：`open "steam://rungameid/2868840//-nomods"`。直接跑包内二进制不是正统路径。
+   Why this gets its own report: when `PlayerAgreedToModLoading` is false, the loader sets `mod_states = Disabled` at once. The log then holds only `Skipping loading mod <id>, user has not yet seen the mods warning`. The field name in the save file is `mods_enabled`.
+3. Restart the game. The game finds a new mod only at startup. A mod installed while the game runs is not loaded.
+4. When you pass arguments to the game, start it through Steam: `open "steam://rungameid/2868840//-nomods"`. To run the binary inside the bundle directly is not the canonical path.
 
-## 3. 验收
+## 3. Acceptance
 
-看日志 `~/Library/Application Support/SlayTheSpire2/logs/godot.log`，四行都要出现：
+Read the log at `~/Library/Application Support/SlayTheSpire2/logs/godot.log`. All four lines must appear:
 
 ```
-Found mod manifest file .../mods/<目录>/<id>.json
-Loading assembly DLL .../mods/<目录>/<id>.dll
+Found mod manifest file .../mods/<directory>/<id>.json
+Loading assembly DLL .../mods/<directory>/<id>.dll
 Calling initializer method of type <T> for <id>, Version=...
  --- RUNNING MODDED! --- Loaded N mods (M total)
 ```
 
-只看到第一行时，程序集没加载：检查 `has_dll` 与文件名。看到前两行但没有第三行时，程序集加载了但没有 `[ModInitializer]`。
+If you see only the first line, the assembly did not load. Check `has_dll` and the file name. If you see the first two lines but not the third, the assembly loaded, but it holds no `[ModInitializer]`.
 
-另外确认了两点再算收工：游戏里 mod 列表能看到它，并且存档走的是 modded 分支（日志 `Profile-scoped data path initialized: user://steam/<id>/modded/profileN`）。
+Two more points must hold before you finish. The mod list in the game shows the mod. The save uses the modded branch, with this log line: `Profile-scoped data path initialized: user://steam/<id>/modded/profileN`.
 
-## 4. 常见错误
+## 4. Common errors
 
-| 现象 | 原因 | 处理 |
+| Symptom | Cause | Action |
 |---|---|---|
-| 装完游戏里没有 | 加载总开关关着 | 见上表 |
-| 装了但日志里第一行都没有 | mods 目录位置不对 | `check_game_paths` 复核 modInstallDir |
-| 目录名带 `_pimod` | 目标目录被别的 mod 占着 | 正常行为，没覆盖别人。告诉玩家装了两份 |
-| 游戏里显示 duplicate | 同一个 mod 同时在 Workshop 与本地 | 正常行为：本地优先 |
-| 日志说版本不支持 | 清单的 `min_game_version` 高于装机版本 | 改了游戏版本后要同步改清单 |
-| 装完闪退 | 入口方法不是静态，或装载时抛异常 | 看日志里的 `Exception thrown when calling mod initializer` |
+| The game does not show the mod after the install | The master load switch is off | See the table above. |
+| The log does not hold even the first line after the install | The mods directory is in the wrong place | Recheck modInstallDir with `check_game_paths`. |
+| The directory name carries `_pimod` | Another mod holds the target directory | Normal behavior. Nothing was overwritten. Tell the player that the mods directory now holds two copies. |
+| The game shows duplicate | The same mod is in the Workshop and locally at the same time | Normal behavior: the local copy wins. |
+| The log says the version is not supported | The manifest `min_game_version` is higher than the installed game version | After a game version change, change the manifest in the same pass. |
+| The game crashes after the install | The entry method is not static, or the load throws an exception | Read `Exception thrown when calling mod initializer` in the log. |

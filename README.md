@@ -1,40 +1,40 @@
-# Slay the Spire 2 mod 工作区
+# Slay the Spire 2 mod workspace
 
-在这个环境里就能直接做 Slay the Spire 2 的 mod：读 `docs/` 了解格式，在 `your_mods/<mod名>/` 下产出 mod，用 `validate_mod` 校验、`install_mod` 装进游戏。
+You can write Slay the Spire 2 mods directly in this environment. Read `docs/` to learn the format. Write the mod under `your_mods/<mod name>/`. Validate it with `validate_mod`. Install it with `install_mod`.
 
-- 结构说明与环境事实见 `AGENTS.md`。
-- 游戏机制、清单格式、加载开关见 `docs/game.md`。
-- **踩坑清单见 `docs/traps.md`** —— 出错时先看这一页，这里的失败几乎都不报错。
+- `AGENTS.md` holds the structure and the environment facts.
+- `docs/game.md` holds the game mechanics, the manifest format, and the mod loading switch.
+- **`docs/traps.md` holds the trap list.** If something fails, read that page first. Almost every failure here reports no error.
 
-## 这是什么类型的 mod
+## What kind of mod this is
 
-`modType: godot-csharp`。游戏是 Godot 4.5.1 + C# (`net9.0`)，mod 产物是：
+`modType: godot-csharp`. The game is Godot 4.5.1 plus C# (`net9.0`). A mod produces:
 
 ```
-<id>.json   清单（文件名必须等于 id）
-<id>.dll    程序集（文件名必须等于 id）
+<id>.json   the manifest (the file name must equal the id)
+<id>.dll    the assembly (the file name must equal the id)
 ```
 
-v1 **不带资源包**（`compile.pck: false`）。要加 `.pck` 需要先打通 Godot 导出链。
+v1 ships **no asset pack** (`compile.pck: false`). To add a `.pck`, you must first make the Godot export chain work.
 
-## 工具
+## Tools
 
-| 工具 | 用途 |
+| Tool | Purpose |
 |---|---|
-| `check_runtime` | .NET 9 SDK 是否就绪 |
-| `try_set_game_dir` / `set_game_dir` / `check_game_paths` | 发现、记录、校验三条路径 |
-| `validate_mod` | 校验清单 + 编译 + 检查产物 |
-| `inspect_api` | 按名字查游戏类型，并反编译读源码（不猜类名） |
-| `install_mod` | 复制到游戏的 mods 目录，并报告加载总开关的状态 |
+| `check_runtime` | Whether the .NET 9 SDK is ready |
+| `try_set_game_dir` / `set_game_dir` / `check_game_paths` | Locate, record, and check three paths |
+| `validate_mod` | Validate the manifest, compile the code, and check the products |
+| `inspect_api` | Find a game type by name, then decompile it and read the source (do not guess class names) |
+| `install_mod` | Copy the mod into the game's mods directory, then report the state of the mod loading switch |
 
-路径与判据都在 `.pi/lib/`；`mod-repo.json` 只放常量。
+The paths and the criteria are in `.pi/lib/`. `mod-repo.json` holds constants only.
 
-## 第三方组件
+## Third-party components
 
-`tools/` 下有入库的第三方二进制（随仓的反编译器）。清单、版本与 MIT 许可全文见
-[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md)。这三个文件与上游字节相同，不得改动。
+`tools/` holds third-party binaries that the repository tracks. They are the decompiler that ships with this repository. The inventory, the versions, and the full MIT license text are in
+[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md). These three files are byte-identical to upstream, and you must not change them.
 
-`vendor/baselib/` 是另一类：**BaseLib**，玩家机器上要被游戏加载的内容 mod 依赖（MIT，见
-[`vendor/baselib/README.md`](vendor/baselib/README.md)）。它只在玩家**一份都没有**时由
-`install_mod` 放进去；已经有一份就不动，否则会盖掉 Workshop 订阅并静默钉死版本
-（[`docs/traps.md`](docs/traps.md) 第 9 条）。
+`vendor/baselib/` is a different case. **BaseLib** is a content mod that the game loads on the player's machine, and the other mods depend on it (MIT, see
+[`vendor/baselib/README.md`](vendor/baselib/README.md)). `install_mod` places it only when the player has
+**no copy at all**. If a copy already exists, `install_mod` leaves it alone. An install over that copy would overwrite the Workshop subscription and silently pin the version
+(item 9 of [`docs/traps.md`](docs/traps.md)).

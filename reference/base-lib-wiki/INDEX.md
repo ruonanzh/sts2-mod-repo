@@ -1,98 +1,96 @@
-# BaseLib wiki 快照 · 索引
+# BaseLib wiki snapshot: index
 
-上游：[`Alchyr/BaseLib-Wiki`](https://github.com/Alchyr/BaseLib-Wiki)（MIT）。
-本目录里的页是**逐字快照**，出处与版本见 [`SOURCE.md`](SOURCE.md)。**不得手改。**
+Upstream: [`Alchyr/BaseLib-Wiki`](https://github.com/Alchyr/BaseLib-Wiki) (MIT).
+The pages in this directory are **verbatim snapshots**. Their source and version are in [`SOURCE.md`](SOURCE.md). Do **not** edit them by hand.
 
-## 怎么用这一页
+## How to use this page
 
-**两步，别跳第一步。**
+**There are two steps and you must not skip the first one.**
 
-1. **按玩家的需求找页。** 看下面「按想做什么找」那张表。命中就读那一页 —— 只读命中那几页，不要整套翻。
-2. **再查真名。** wiki 里写的类名、方法名、参数可能与本机这个版本不一致。
-   动手前一定用 `inspect_api` 查一遍：`action=search` 出场类型名，`action=members` 看签名，`action=source` 读实现。
+1. **Find the page from what the player wants to do.** Read the table "Find a page by what you want to do" below. If a row matches, read that page. Read the pages that match only and do not read the whole set.
+2. **Then check the real names.** The class names, the method names, and the parameters in the wiki may differ from this version on your machine. Before you write code, always run `inspect_api`. Use `action=search` to find a type name, `action=members` to read a signature, and `action=source` to read the implementation.
 
-**为什么不能只信 wiki**：它是给「想学 modding 的人」写的，会省略版本差异，也有些页只有代码片段没有前提。
-本仓的原则是「不猜类名」——wiki 给方向，`inspect_api` 给事实。
+**Why the wiki is not the only source**: the wiki addresses people who want to learn modding. It leaves out the differences between versions and some pages have code snippets without the preconditions. The rule of this repository is that we never guess a class name. The wiki gives a direction and `inspect_api` gives the fact.
 
-**wiki 没写的地方不要编。** 见下面「空白清单」，那几处只能反编译。
+**Do not invent what the wiki does not state.** Read the gap list below. The only source for those items is decompilation.
 
-## 按想做什么找
+## Find a page by what you want to do
 
-| 玩家想做的事 | 先读这几页 |
+| What the player wants to do | Read these pages first |
 |---|---|
-| 加一张卡 | [`models/custom-card.md`](models/custom-card.md) → [`models/index.md`](models/index.md)（模型总则、ID 前缀） |
-| 改一张已有卡 | 同上；还要看 [`mechanics.md`](mechanics.md)（动态变量、目标类型） |
-| 加一个遗物 | [`models/custom-relic.md`](models/custom-relic.md) |
-| 加一个药水 | **wiki 没有这一页。** 看 [`models/index.md`](models/index.md) 的总则，然后反编译 `BaseLib.Abstracts.CustomPotionModel` |
-| 加一个能力 / buff | [`models/custom-temporary-power.md`](models/custom-temporary-power.md) |
-| 加一个事件 | [`models/custom-event.md`](models/custom-event.md) |
-| 加一个遭遇（敌人组合） | [`models/custom-encounter.md`](models/custom-encounter.md) |
-| 加一个角色 | [`models/custom-character.md`](models/custom-character.md)（**大半是 stub**）→ [`scenes/creature-visuals.md`](scenes/creature-visuals.md) |
-| 改角色 / 敌人的贴图与动画 | [`scenes/creature-visuals.md`](scenes/creature-visuals.md) |
-| 让文案支持中英双语 | [`localization/code-loc.md`](localization/code-loc.md) · [`localization/simplified-loc.md`](localization/simplified-loc.md) · [`localization/var-loc.md`](localization/var-loc.md) |
-| 卡面上显示一个自己算的数 | [`utilities/custom-calc-vars.md`](utilities/custom-calc-vars.md) · [`localization/display-var.md`](localization/display-var.md) |
-| 加关键词 / 自定义枚举 | [`utilities/enums.md`](utilities/enums.md) |
-| 给 mod 加设置界面 | [`utilities/config.md`](utilities/config.md) → [`utilities/config-advanced.md`](utilities/config-advanced.md) |
-| 加音效 | [`utilities/mod-audio.md`](utilities/mod-audio.md) |
-| 让另一个 mod 能用我的接口 | [`utilities/mod-interop.md`](utilities/mod-interop.md) |
-| 给别人的类加一个字段 | [`utilities/spirefield.md`](utilities/spirefield.md) |
-| 往原版场景里插节点 | [`scenes/add-nodes.md`](scenes/add-nodes.md) |
-| 改能量计数器外观 | [`scenes/energy-counter.md`](scenes/energy-counter.md) |
-| 看 BaseLib 总共有哪些能力 | [`Features.md`](Features.md)（含「还没写文档」的清单） |
+| Add a card | [`models/custom-card.md`](models/custom-card.md) first, then [`models/index.md`](models/index.md) for the general model rules and the ID prefix |
+| Change an existing card | The same pages. Also read [`mechanics.md`](mechanics.md) for dynamic variables and target types |
+| Add a relic | [`models/custom-relic.md`](models/custom-relic.md) |
+| Add a potion | **The wiki has no page for this.** Read the general rules in [`models/index.md`](models/index.md), then decompile `BaseLib.Abstracts.CustomPotionModel` |
+| Add a power or a buff | [`models/custom-temporary-power.md`](models/custom-temporary-power.md) |
+| Add an event | [`models/custom-event.md`](models/custom-event.md) |
+| Add an encounter, which is a set of enemies | [`models/custom-encounter.md`](models/custom-encounter.md) |
+| Add a character | [`models/custom-character.md`](models/custom-character.md) first, which is **mostly a stub**, then [`scenes/creature-visuals.md`](scenes/creature-visuals.md) |
+| Change the art and the animation of a character or an enemy | [`scenes/creature-visuals.md`](scenes/creature-visuals.md) |
+| Make a string work in both Chinese and English | [`localization/code-loc.md`](localization/code-loc.md), [`localization/simplified-loc.md`](localization/simplified-loc.md), and [`localization/var-loc.md`](localization/var-loc.md) |
+| Put a value that you calculate into the text of a card | [`utilities/custom-calc-vars.md`](utilities/custom-calc-vars.md) and [`localization/display-var.md`](localization/display-var.md) |
+| Add a keyword or a custom enum | [`utilities/enums.md`](utilities/enums.md) |
+| Add a settings screen to the mod | [`utilities/config.md`](utilities/config.md) first, then [`utilities/config-advanced.md`](utilities/config-advanced.md) |
+| Add a sound effect | [`utilities/mod-audio.md`](utilities/mod-audio.md) |
+| Let another mod call the interface of this mod | [`utilities/mod-interop.md`](utilities/mod-interop.md) |
+| Add a field to a class of another mod | [`utilities/spirefield.md`](utilities/spirefield.md) |
+| Add a node to a vanilla scene | [`scenes/add-nodes.md`](scenes/add-nodes.md) |
+| Change the look of the energy counter | [`scenes/energy-counter.md`](scenes/energy-counter.md) |
+| See all the capabilities that BaseLib has | [`Features.md`](Features.md), which also lists the items that have no documentation yet |
 
-## 全部页面
+## All pages
 
-| 页面 | 讲什么 | 状态 |
+| Page | Topic | Status |
 |---|---|---|
-| [`Features.md`](Features.md) | 功能总表：值得一看的能力 + 还没写文档的东西 + 小功能（遗物图覆盖、描述修改钩子等） | 完整 |
-| [`mechanics.md`](mechanics.md) | BaseLib 加的钩子接口、关键词、动态变量（Persist/Exhaustive/Refund）、自定义目标类型 | 完整 |
-| [`models/index.md`](models/index.md) | 自定义模型总则：ModelDb 自动加载、**ID 自动加前缀**、何时必须用 `Custom*Model` | 完整 |
-| [`models/custom-card.md`](models/custom-card.md) | 卡：`[Pool]` 必需且可继承、`ConstructedCardModel` 替代写法、frame/banner 覆盖 | **`CardModel` 一节是 TODO** |
-| [`models/custom-relic.md`](models/custom-relic.md) | 遗物：`[Pool]`、`GetUpgradeReplacement`、三个图标路径及其默认位置 | 完整 |
-| [`models/custom-character.md`](models/custom-character.md) | 角色：池子与视觉两节都是 stub，只有 `Extra` 有内容 | **stub** |
-| [`models/custom-ancient.md`](models/custom-ancient.md) | 远古（Ancient）：遗物池、生成、本地化、资源 | 完整 |
-| [`models/custom-encounter.md`](models/custom-encounter.md) | 遭遇：一场战斗里放哪些怪、怎么排 | 完整 |
-| [`models/custom-event.md`](models/custom-event.md) | 事件：触发条件、选项、结果 | 完整 |
-| [`models/custom-orbs.md`](models/custom-orbs.md) | 充能球：图标与精灵、音效、随机生成池、`OrbModel` 要点 | 完整 |
-| [`models/custom-temporary-power.md`](models/custom-temporary-power.md) | 临时能力（回合结束会掉的 buff）及其 wrapper | 完整 |
-| [`models/custom-singleton.md`](models/custom-singleton.md) | 单例模型：被动接收战斗/跑局钩子，用来实现机制或记账 | 完整（短） |
-| [`models/custom-act.md`](models/custom-act.md) | 幕（Act）：只有一段注释和一个指向源码的链接 | **stub** |
-| [`scenes/creature-visuals.md`](scenes/creature-visuals.md) | 生物视觉：必需节点表、静态图直接变生物、Godot 动画自动播放 | **Spine 一节空白** |
-| [`scenes/add-nodes.md`](scenes/add-nodes.md) | 往原版场景里加节点（`AddedNode` / `SpireField` 的变体） | 完整 |
-| [`scenes/energy-counter.md`](scenes/energy-counter.md) | 自定义能量计数器：`NEnergyCounter` 的场景要求 | 完整 |
-| [`scenes/merchant-character.md`](scenes/merchant-character.md) | 商人角色的视觉（Spine） | 完整（短） |
-| [`scenes/index.md`](scenes/index.md) | 场景类工具的总则：为什么需要这些工具 | 导读 |
-| [`localization/index.md`](localization/index.md) | 本地化总则：`DefaultLoc.Set` 设回退语言 | 导读 |
-| [`localization/code-loc.md`](localization/code-loc.md) | 文案写在 C# 里：`ILocalizationProvider`、`CardLoc` 等 record、按语言分支 | 完整 |
-| [`localization/simplified-loc.md`](localization/simplified-loc.md) | 简化语法：`!D!`、`*gold*`、`(plural)`、`-旧-+新+`、`[E?]` | 完整 |
-| [`localization/var-loc.md`](localization/var-loc.md) | 给动态变量配提示文案 | 完整 |
-| [`localization/display-var.md`](localization/display-var.md) | `DisplayVar`：往描述里塞任意加工过的文字 | 完整（短） |
-| [`localization/ancient-dialogue.md`](localization/ancient-dialogue.md) | 远古的对话文本格式 | 完整 |
-| [`utilities/config.md`](utilities/config.md) | mod 设置界面：声明式，各控件写法 | 完整 |
-| [`utilities/config-advanced.md`](utilities/config-advanced.md) | 设置进阶：手动存取、按钮、条件显示、折叠分组 | 完整 |
-| [`utilities/custom-calc-vars.md`](utilities/custom-calc-vars.md) | 自定义计算变量：绕开原版「名字固定、只能用在卡上」的限制 | 完整 |
-| [`utilities/enums.md`](utilities/enums.md) | 自定义枚举与关键词、静态提示、卡牌堆 | 完整 |
-| [`utilities/pooling.md`](utilities/pooling.md) | `GeneratedNodePool`：把代码生成的节点纳入对象池 | 完整（短） |
-| [`utilities/spirefield.md`](utilities/spirefield.md) | `SpireField`：给已有类加字段；`SavedSpireField` 会存盘 | 完整 |
-| [`utilities/mod-audio.md`](utilities/mod-audio.md) | 音频工具 | 完整（短） |
-| [`utilities/mod-interop.md`](utilities/mod-interop.md) | 让别的 mod 调用你的接口 | 完整 |
-| [`utilities/ancient-upgrades.md`](utilities/ancient-upgrades.md) | 远古升级相关 | 完整（短） |
-| [`utilities/index.md`](utilities/index.md) | 空的 | **空** |
-| [`extras/index.md`](extras/index.md) | 空的 | **空** |
+| [`Features.md`](Features.md) | The full feature list: the capabilities worth a look, the undocumented items, and the small features such as relic image overrides and description hooks | complete |
+| [`mechanics.md`](mechanics.md) | The hook interfaces that BaseLib adds, keywords, dynamic variables (Persist/Exhaustive/Refund), and custom target types | complete |
+| [`models/index.md`](models/index.md) | The general rules for a custom model. ModelDb loads the model automatically, and **an ID gets a prefix automatically**. `Custom*Model` is mandatory in some cases. | complete |
+| [`models/custom-card.md`](models/custom-card.md) | Cards: `[Pool]` is mandatory and a subclass inherits it, the `ConstructedCardModel` alternative, and the frame and banner overrides | **The `CardModel` section is a TODO** |
+| [`models/custom-relic.md`](models/custom-relic.md) | Relics: `[Pool]`, `GetUpgradeReplacement`, and the three icon paths with their default locations | complete |
+| [`models/custom-character.md`](models/custom-character.md) | Characters: the pool section and the visual section are both stubs and only `Extra` has content | **stub** |
+| [`models/custom-ancient.md`](models/custom-ancient.md) | The Ancient: the relic pool, generation, localization, and resources | complete |
+| [`models/custom-encounter.md`](models/custom-encounter.md) | An encounter: which enemies a fight has and how the game arranges them | complete |
+| [`models/custom-event.md`](models/custom-event.md) | An event: the condition that triggers it, the options, and the results | complete |
+| [`models/custom-orbs.md`](models/custom-orbs.md) | Orbs: the icon and the sprite, the sound effect, the random pool, and the key points of `OrbModel` | complete |
+| [`models/custom-temporary-power.md`](models/custom-temporary-power.md) | A temporary power, which is a buff that expires at the end of the turn, and its wrapper | complete |
+| [`models/custom-singleton.md`](models/custom-singleton.md) | A singleton model: it receives the combat and run hooks, and it implements a mechanic or tracks state | complete (short) |
+| [`models/custom-act.md`](models/custom-act.md) | An Act: one comment and one link to the source code | **stub** |
+| [`scenes/creature-visuals.md`](scenes/creature-visuals.md) | Creature visuals: the table of the mandatory nodes, how a still image becomes a creature, and how Godot plays an animation automatically | **The Spine section is empty** |
+| [`scenes/add-nodes.md`](scenes/add-nodes.md) | Add a node to a vanilla scene, as a variant of `AddedNode` or `SpireField` | complete |
+| [`scenes/energy-counter.md`](scenes/energy-counter.md) | A custom energy counter: the scene requirements of `NEnergyCounter` | complete |
+| [`scenes/merchant-character.md`](scenes/merchant-character.md) | The visuals of the merchant character (Spine) | complete (short) |
+| [`scenes/index.md`](scenes/index.md) | The general rules for the scene tools, and why you need them | overview |
+| [`localization/index.md`](localization/index.md) | The general rules for localization: `DefaultLoc.Set` sets the fallback language | overview |
+| [`localization/code-loc.md`](localization/code-loc.md) | Strings that live in C#: `ILocalizationProvider`, the record types such as `CardLoc`, and a branch per language | complete |
+| [`localization/simplified-loc.md`](localization/simplified-loc.md) | The simplified syntax: `!D!`, `*gold*`, `(plural)`, `-old-+new+`, and `[E?]` | complete |
+| [`localization/var-loc.md`](localization/var-loc.md) | The tooltip text for a dynamic variable | complete |
+| [`localization/display-var.md`](localization/display-var.md) | `DisplayVar`: put arbitrary processed text into a description | complete (short) |
+| [`localization/ancient-dialogue.md`](localization/ancient-dialogue.md) | The dialogue text format of the Ancient | complete |
+| [`utilities/config.md`](utilities/config.md) | The mod settings screen: it is declarative, and this page covers each control | complete |
+| [`utilities/config-advanced.md`](utilities/config-advanced.md) | Advanced settings: manual read and write, buttons, conditional display, and collapsible groups | complete |
+| [`utilities/custom-calc-vars.md`](utilities/custom-calc-vars.md) | Custom calculated variables: they avoid the vanilla limit that a variable has a fixed name and works on a card only | complete |
+| [`utilities/enums.md`](utilities/enums.md) | Custom enums and keywords, static tooltips, and card piles | complete |
+| [`utilities/pooling.md`](utilities/pooling.md) | `GeneratedNodePool`: put a node that code generates into the object pool | complete (short) |
+| [`utilities/spirefield.md`](utilities/spirefield.md) | `SpireField`: add a field to an existing class. `SavedSpireField` also saves the value to disk | complete |
+| [`utilities/mod-audio.md`](utilities/mod-audio.md) | The audio tools | complete (short) |
+| [`utilities/mod-interop.md`](utilities/mod-interop.md) | Let another mod call the interface of this mod | complete |
+| [`utilities/ancient-upgrades.md`](utilities/ancient-upgrades.md) | Ancient upgrades | complete (short) |
+| [`utilities/index.md`](utilities/index.md) | Empty | **empty** |
+| [`extras/index.md`](extras/index.md) | Empty | **empty** |
 
-## 空白清单（这些只能反编译）
+## Gap list (only decompilation covers these items)
 
-上游明确没写、或者只写了一半的地方。**遇到它们不要试图从 wiki 推，直接 `inspect_api action=source`。**
+These items are absent upstream or only half written. **Do not infer them from the wiki. Run `inspect_api action=source` instead.**
 
-| 缺口 | 现状 | 去哪查 |
+| Gap | Current state | Where to look |
 |---|---|---|
-| 卡图（portrait）怎么换 | `models/custom-card.md` 只有 frame / banner，`CardModel` 一节是 TODO | 反编译 `MegaCrit.Sts2.Core.Models.CardModel`，找 `PortraitPath` |
-| Spine 生物动画怎么替换 | `scenes/creature-visuals.md` 的 `## Spine` 下面是空的 | 反编译 `NCreatureVisuals` 与原版生物的 `.tscn` |
-| 药水 | **没有这一页** | 反编译 `BaseLib.Abstracts.CustomPotionModel`（含 `Image` / `LargeImagePatch` / `OutlinePatch` 内嵌补丁） |
-| 自定义角色 | `models/custom-character.md` 的池子与视觉都是 stub | 反编译 `BaseLib.Abstracts.CustomCharacterModel` |
+| How to change the portrait of a card | `models/custom-card.md` covers the frame and the banner only. The `CardModel` section is a TODO | Decompile `MegaCrit.Sts2.Core.Models.CardModel` and find `PortraitPath` |
+| How to replace a Spine creature animation | The `## Spine` section of `scenes/creature-visuals.md` is empty | Decompile `NCreatureVisuals` and the `.tscn` of a vanilla creature |
+| Potions | **The wiki has no page for this** | Decompile `BaseLib.Abstracts.CustomPotionModel`. It holds the embedded patches `Image`, `LargeImagePatch`, and `OutlinePatch` |
+| Custom characters | The pool section and the visual section of `models/custom-character.md` are both stubs | Decompile `BaseLib.Abstracts.CustomCharacterModel` |
 
-## 出处与同步
+## Source and update
 
-- 快照对应哪个 commit、哪个 BaseLib 版本：[`SOURCE.md`](SOURCE.md)
-- 上游更新了要重抓：`node scripts/sync-base-lib-wiki.mjs`（只比对用 `--check`）
-- **不要手改本目录下的任何 wiki 页。** 要补我们的结论，写进 `docs/game.md` 或对应的 SKILL。
+- The commit and the BaseLib version of this snapshot are in [`SOURCE.md`](SOURCE.md).
+- If upstream changes, get the pages again with `node scripts/sync-base-lib-wiki.mjs`. Add `--check` to compare only.
+- **Do not edit a wiki page in this directory by hand.** To add a conclusion of ours, write it into `docs/game.md` or the matching SKILL.

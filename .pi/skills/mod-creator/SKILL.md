@@ -1,77 +1,77 @@
 ---
 name: mod-creator
-description: 玩家想做一个 mod、加一段玩法、改卡牌数值、或加一张新卡时用。覆盖从复制样例到编译通过的整段。不适用：只把已有 mod 装进游戏（见 mod-installer）、环境还没就位时（见 setup-workspace）。
+description: 'Use when the player wants to make a mod, add a piece of gameplay, change a card value, or add a new card. Covers the whole span from copying the sample to a successful compile. Not for: installing an existing mod into the game (see mod-installer), or when the environment is not ready (see setup-workspace).'
 ---
 
-# 做一个 mod
+# Make a mod
 
-**目标**：产出一个能编译、能过 `validate_mod` 的 mod 目录。不管玩法，只保证结构正确。
+**Goal**: Produce a mod directory that compiles and passes `validate_mod`. Gameplay is not the concern here, only correct structure.
 
-## 1. 需要的输入
+## 1. Required input
 
-| 问 | 默认 |
+| Question | Default |
 |---|---|
-| 做什么 | 必须问清。一句话即可，例如「加一张 2 费的攻击牌」 |
-| mod 叫什么 | 玩家给的目录名。它只决定目录，不决定游戏里的名字 |
-| 用不用 BaseLib | 加内容（卡牌、遗物、事件、角色）时用；只打补丁可以不用 |
+| What to make | You must get one clear sentence from the player, for example "add a 2-cost attack card" |
+| How to name the mod | The directory name the player gives. It sets the directory only, not the name in the game. |
+| Whether to use BaseLib | Use it when you add content: cards, relics, events, or characters. A patch-only mod may leave it out. |
 
-## 2. 做
+## 2. Steps
 
-1. 复制样例目录，然后**一次改三处同名的地方**：
+1. Copy the sample directory, then **change all three places that carry the name in one pass**:
 
    ```
-   cp -r reference/example_mod your_mods/<你的名字>
+   cp -r reference/example_mod your_mods/<your name>
    ```
 
-   | 改哪里 | 改成什么 |
+   | Where to change | New value |
    |---|---|
-   | `.csproj` 的 `<AssemblyName>` | 你的 mod id |
-   | `Entry.cs` 的 `namespace` | 同上 |
-   | `<名字>.json` 的文件名与 `id` 字段 | 同上 |
+   | `<AssemblyName>` in the `.csproj` | Your mod id |
+   | The `namespace` in `Entry.cs` | The same |
+   | The file name of `<name>.json` and its `id` field | The same |
 
-   三处必须完全一致。加载器按 `<id>.dll` 读程序集，文件名与 id 不一致时它会静默不加载。
+   The three places must match exactly. The loader reads the assembly as `<id>.dll`. If the file name and the id differ, it does not load the mod, and it reports no error.
 
-2. 写或改入口。入口方法是静态、无参：
+2. Write or change the entry point. The entry method is static and takes no parameters:
 
    ```csharp
    [ModInitializer(nameof(Init))]
    public static class Entry
    {
-       public static void Init() { /* 你的 mod */ }
+       public static void Init() { /* your mod */ }
    }
    ```
 
-3. 写清单。只允许这 10 个键：`id`、`name`、`author`、`description`、`version`、`has_pck`、`has_dll`、`dependencies`、`affects_gameplay`、`min_game_version`。
+3. Write the manifest. The manifest accepts only these 10 keys: `id`, `name`, `author`, `description`, `version`, `has_pck`, `has_dll`, `dependencies`, `affects_gameplay`, `min_game_version`.
 
-   | 键 | 这个仓库的写法 |
+   | Key | The rule in this repository |
    |---|---|
-   | `has_dll` | 必须 `true` |
-   | `has_pck` | v1 必须是 `false`；写了 `true` 却不出 `.pck` 会在装载时抛异常 |
-   | `version` | 必须是 `x.y.z`。解析失败会让依赖它的 mod 全部失败 |
-   | `min_game_version` | 写本机版本（当前 `0.107.1`）。不写只出 WARN |
-   | `affects_gameplay` | 改了游戏逻辑写 `true`，纯外观写 `false`。设错会让多人联机 desync |
-   | `dependencies` | 用 BaseLib 时写 `[{"id":"BaseLib","min_version":"3.3.0"}]` |
+   | `has_dll` | Must be `true` |
+   | `has_pck` | v1 must be `false`. If you write `true` and the build produces no `.pck`, the load throws an exception. |
+   | `version` | Must be `x.y.z`. If parsing fails, every mod that depends on it fails. |
+   | `min_game_version` | Write the local version (currently `0.107.1`). If you leave it out, you get a WARN only. |
+   | `affects_gameplay` | Write `true` when you change game logic, and `false` for appearance only. A wrong value causes a multiplayer desync. |
+   | `dependencies` | When you use BaseLib, write `[{"id":"BaseLib","min_version":"3.3.0"}]`. |
 
-   **目录里只能有一个 `.json`。** 加载器把任何 `.json` 都当清单读。
+   **The directory must hold one `.json` file only.** The loader reads every `.json` file as a manifest.
 
-4. 要用游戏 API 时先查名字，不得凭记忆：`inspect_api action=search query=<子串>`，再用 `action=source typeName=<全名>` 读源码。
-5. 编译并校验：`validate_mod modDir=your_mods/<你的名字>`。
+4. Before you use a game API, query the name first. Do not work from memory. Run `inspect_api action=search query=<substring>`, then read the source with `action=source typeName=<full name>`.
+5. Compile and validate: `validate_mod modDir=your_mods/<your name>`.
 
-## 3. 验收
+## 3. Acceptance
 
-- `validate_mod` 返回 PASS，并且文本里有「compiled」字样。
-- 返回 PARTIAL 时**不算通过**：那表示没编译。按 NEXT 行补齐前置再跑一次。
-- 想确认产物真的是自己写的代码：`strings -a <id>.dll | grep ModInitializerAttribute` 应有输出。
+- `validate_mod` returns PASS, and its text contains the word `compiled`.
+- A PARTIAL return **does not pass**. It means the build did not compile. Resolve the precondition that the NEXT line names, then run it again.
+- To prove that the artifact is really your code, run `strings -a <id>.dll | grep ModInitializerAttribute`. You must see output.
 
-## 4. 常见错误
+## 4. Common errors
 
-| 现象 | 原因 | 处理 |
+| Symptom | Cause | Action |
 |---|---|---|
-| `manifest file is X.json but its id is Y` | 文件名与 id 不一致 | 两处一起改，不得只改一处 |
-| `found N .json files at the top` | 目录里有第二个 json | 删掉多余的那个，配置要用别的扩展名或放进子目录 |
-| `AssemblyName is "A" but the manifest id is "B"` | csproj 没改 | 改 `<AssemblyName>` |
-| `missing <id>.dll after a successful build` | 输出名与 id 不同 | 同上 |
-| `dll looks like an empty stub` | csproj 把输出目录指到了工程根，SDK 把源文件排除了 | 删掉自定义 `OutputPath`，用默认的 `bin/Release` |
-| `NETSDK1045` | SDK 低于 9 | 见 setup-workspace |
-| `min_game_version is X but the installed game is Y` | 清单写的版本高于本机 | 改成不高于本机版本 |
-| 编译报找不到类型 | 类型名猜错，或没引用程序集 | 用 `inspect_api` 查真名；引用列表在 `mod-repo.json` 的 `compile.references` |
+| `manifest file is X.json but its id is Y` | The file name and the id differ | Change both places together. Do not change only one. |
+| `found N .json files at the top` | The directory holds a second json file | Delete the extra one. A config file needs another extension or a subdirectory. |
+| `AssemblyName is "A" but the manifest id is "B"` | You did not change the csproj | Change `<AssemblyName>`. |
+| `missing <id>.dll after a successful build` | The output name and the id differ | The same as above. |
+| `dll looks like an empty stub` | The csproj points the output directory at the project root. The SDK then excludes the source files. | Delete the custom `OutputPath`. Use the default `bin/Release`. |
+| `NETSDK1045` | The SDK is older than 9 | See setup-workspace. |
+| `min_game_version is X but the installed game is Y` | The manifest version is higher than the local game | Change it to a version no higher than the local one. |
+| The build reports a type it cannot find | The type name is wrong, or the assembly is not referenced | Query the real name with `inspect_api`. The reference list is `compile.references` in `mod-repo.json`. |

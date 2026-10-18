@@ -1,170 +1,221 @@
-# 坑
+# Traps
 
-这个游戏最贵的学习成本在这里：出错的默认表现**多数不是崩溃**，而是「看起来装了，其实没加载」。
-少数几条会直接崩或起不来，但**报错的位置离原因很远**（第 14 条最典型）。
-下面每条都按「症状、原因、怎么确认」三段写。
+This game puts its most expensive learning cost here. When something is wrong, the default
+behaviour **is not a crash in most cases**. The default behaviour is "it looks installed, but it
+did not load". A few traps crash the game or stop it at startup, but **the error appears far from
+the cause** (trap 14 is the clearest example).
+Each trap below has three parts: symptom, cause, and how to check.
 
-## 1. mod 装了但游戏里没有
+## 1. The mod is installed but the game does not show it
 
-**症状**：`mods/` 里有目录，游戏里看不到，也没有报错。
+**Symptom**: The mod directory is in `mods/`, the game does not show it, and the game prints no
+error.
 
-**原因**（按概率排序）：
+**Cause** (in order of probability):
 
-| 原因 | 怎么确认 |
+| Cause | How to check |
 |---|---|
-| 总开关 `mod_settings.mods_enabled` 是 `false` | `godot.log` 里只有 `Skipping loading mod <id>, user has not yet seen the mods warning` |
-| `.json` 文件名 ≠ `id` | 加载器按 `<id>.dll` 找程序集；文件名不对就等于没写清单 |
-| 目录里有第二个 `.json` | 加载器会把它也当清单读，可能变成第二个 mod 或 `DUPLICATE_ID` |
-| `has_dll` 缺失或为 false | 日志有 `Found mod manifest file` 但没有 `Loading assembly DLL` |
-| `mods/` 目录是我们自己建的，游戏不会建 | 目录不存在时 `Initialize` 直接跳过 |
+| The global switch `mod_settings.mods_enabled` is `false` | `godot.log` holds only `Skipping loading mod <id>, user has not yet seen the mods warning` |
+| The `.json` file name is not equal to `id` | The loader finds the assembly by `<id>.dll`. A wrong file name gives the same result as no manifest |
+| The directory holds a second `.json` file | The loader reads that file as a manifest too. It may become a second mod, or `DUPLICATE_ID` |
+| `has_dll` is absent or false | The log holds `Found mod manifest file` but it does not hold `Loading assembly DLL` |
+| We create the `mods/` directory ourselves. The game does not create it | If the directory does not exist, `Initialize` skips the mod at once |
 
-**确认方式**：看 `godot.log` 里这四行的顺序——
+**How to check**: Read the order of these four lines in `godot.log`.
 
 ```
-Found mod manifest file .../mods/<目录>/<id>.json
-Loading assembly DLL .../mods/<目录>/<id>.dll
+Found mod manifest file .../mods/<mod directory>/<id>.json
+Loading assembly DLL .../mods/<mod directory>/<id>.dll
 Calling initializer method of type <T> for <id>, Version=...
  --- RUNNING MODDED! --- Loaded N mods (M total)
 ```
 
-少了第二行说明程序集没加载（`has_dll` 或文件名问题）。少了第三行说明程序集加载了但没有 `[ModInitializer]`。
+If the second line is absent, the assembly did not load. The cause is `has_dll` or the file name.
+If the third line is absent, the assembly loaded but it has no `[ModInitializer]`.
 
-## 2. 编译报 CS0012：缺的不是 BaseLib，是 sts2
+## 2. The compiler reports CS0012. The assembly that is absent is sts2, not BaseLib
 
-**症状**：
+**Symptom**:
 
 ```
 error CS0012: The type 'PowerModel' is defined in an assembly that is not referenced.
 You must add a reference to assembly 'sts2, Version=0.1.0.0, ...'.
 ```
 
-**原因**：`BaseLib` 不是游戏的替代品，它是**架在游戏之上的一层**。`BaseLib.Abstracts.CustomPowerModel` 的基类是 `MegaCrit.Sts2.Core.Models.PowerModel`，所以在 `sts2.dll` 里。
+**Cause**: `BaseLib` is not a replacement for the game. It is **a layer that sits on top of the
+game**. The base class of `BaseLib.Abstracts.CustomPowerModel` is
+`MegaCrit.Sts2.Core.Models.PowerModel`, so that base class is in `sts2.dll`.
 
-**实测**：写一个类，一个 MegaCrit 类名都不出现，只继承 BaseLib 的类型 ——
+**Measured**: Write a class that names no MegaCrit type and inherits only a BaseLib type.
 
 ```csharp
 public abstract class MyPower : BaseLib.Abstracts.CustomPowerModel { }
 ```
 
-只引用 `BaseLib.dll` 时，编译器仍然要求 `sts2.dll`。继承关系本身就是引用。
+With a reference to `BaseLib.dll` only, the compiler still asks for `sts2.dll`. The inheritance
+itself is a reference.
 
-**所以**：两个程序集都要引用。这个仓库的 `mod-repo.json` 里 `compile.references` 已经是 `["sts2.dll","0Harmony.dll"]`，`compile.packages` 加了 BaseLib。
+**So**: Reference both assemblies. In `mod-repo.json` of this repository, `compile.references` is
+already `["sts2.dll","0Harmony.dll"]`, and `compile.packages` adds BaseLib.
 
-**反过来也成立**：不继承 BaseLib 类型的 mod **不需要** BaseLib。`reference/example_mod` 就是零依赖的，照样能加载。BaseLib 只有要它的便利类时才引入。
+**The reverse also holds**: A mod that inherits no BaseLib type **does not need** BaseLib.
+`reference/example_mod` has no dependency, and it still loads. Add BaseLib only when you want its
+convenience classes.
 
-## 3. 卡牌加进去了但没名字
+## 3. The card is added but it has no name
 
-**症状**：模型计数涨了（`ModelIdSerializationCache ... Entries: 1623`），卡牌也注册了，但游戏里标题是一串 key 或者空白。没有崩溃。
+**Symptom**: The model count goes up (`ModelIdSerializationCache ... Entries: 1623`), and the game
+registers the card. The title in the game is a key string, or the title is blank. The game does not
+crash.
 
-**原因**：本地化没生效。`ModManager.GetModdedLocTables` 只查 `res://<mod.id>/localization/...`，而 **DLL-only 的 mod 没有 `res://` 命名空间** —— json 本地化根本读不到。
+**Cause**: Localization did not take effect. `ModManager.GetModdedLocTables` reads only
+`res://<mod.id>/localization/...`, and **a DLL-only mod has no `res://` namespace**. The game
+cannot read a json localization at all.
 
-**两条修法**：
+**Two fixes**:
 
-- 出 PCK（`.pck` 里带 `localization/<lang>/cards.json`）；
-- 或者在 C# 里重写 BaseLib 的 `Localization` 属性，例如
+- Ship a PCK (the `.pck` holds `localization/<lang>/cards.json`).
+- Or override the BaseLib `Localization` property in C#, for example
   `public override List<(string, string)> Localization => new CardLoc("Focused Strike", "Deal {Damage} damage.");`
 
-缺 key 时 BaseLib 只报错不崩，所以这个问题不会自己暴露。
+When a key is absent, BaseLib reports an error and does not crash. So this problem does not show
+itself.
 
-## 4. 补丁写了但没效果
+## 4. The patch runs but it has no effect
 
-**症状**：DLL 加载成功，日志正常，但游戏行为没变。
+**Symptom**: The DLL loads, the log is normal, and the game behaviour does not change.
 
-**原因**：同一个方法被**框架抢先 patch**。BaseLib / RitsuLib / ATA 都用 Harmony prefix 抢 `CardModel.PortraitPath` 一类 getter，它们的 prefix 优先级更高，你的 patch 根本不执行。
+**Cause**: A **framework patched the same method first**. BaseLib, RitsuLib, and ATA all use a
+Harmony prefix to take a getter such as `CardModel.PortraitPath`. Their prefix has a higher
+priority, so your patch does not run at all.
 
-**修法**：给自己的 prefix 加
+**Fix**: Add this attribute to your prefix.
 
 ```csharp
 [HarmonyPriority(Priority.First)]
 ```
 
-**确认方式**：在 prefix 里 `Log.Info` 一行，看它有没有出现在 `godot.log`。
+**How to check**: Write one `Log.Info` line in the prefix, and check whether it appears in
+`godot.log`.
 
-## 5. 编译"成功"但 dll 是空壳
+## 5. The build "passes" but the dll is an empty shell
 
-**症状**：`dotnet build` 退出 0，dll 存在，游戏能加载，但什么都没发生。
+**Symptom**: `dotnet build` exits with 0, the dll exists, and the game loads it. Nothing happens.
 
-**原因**：csproj 把 `OutputPath` 指到了工程根目录，于是 SDK 的默认排除规则把工程自己的 `*.cs` 全排掉，什么都没编。
+**Cause**: The csproj points `OutputPath` at the project root. The default exclusion rules of the
+SDK then exclude every `*.cs` file of the project itself. The compiler compiles nothing.
 
-**确认方式**：`validate_mod` 会检查产物大小与 `ModInitializerAttribute` 引用；也可以
+**How to check**: `validate_mod` checks the size of the output and the reference to
+`ModInitializerAttribute`. You can also run
 
 ```bash
 strings -a <id>.dll | grep ModInitializerAttribute
 ```
 
-## 6. `version` 解析失败，依赖方全部 FAILED
+## 6. `version` fails to parse, and every dependent mod reports FAILED
 
-**症状**：别的 mod 声明依赖你，报 `MOD_ERROR.DEPENDENCY_VERSION_INVALID`。
+**Symptom**: Another mod declares a dependency on your mod, and that mod reports
+`MOD_ERROR.DEPENDENCY_VERSION_INVALID`.
 
-**原因**：`version` 不是 `x.y.z` 形式，游戏解析失败后 `Mod.version` 为 null。
+**Cause**: `version` is not in the `x.y.z` form. The game fails to parse it, and `Mod.version`
+becomes null.
 
-## 7. `min_game_version` 写太高
+## 7. `min_game_version` is too high
 
-**症状**：mod 完全不加载，日志说明不支持的版本。
+**Symptom**: The mod does not load at all, and the log names an unsupported version.
 
-**原因**：装机版本低于 `min_game_version` 时，加载器判为不支持。
+**Cause**: If the installed version is lower than `min_game_version`, the loader marks the mod as
+unsupported.
 
-**本机**：`v0.107.1`。改游戏版本后要一起改这里。
+**This machine**: `v0.107.1`. When the game version changes, change this field too.
 
-## 8. `affects_gameplay` 设错
+## 8. `affects_gameplay` is set wrong
 
-**症状**：多人联机连不上，或对方的游戏状态和你不一样。
+**Symptom**: A multiplayer session cannot connect, or the game state of the other player differs
+from yours.
 
-**原因**：这个字段默认 **true**。纯外观 mod 设成 true 会被拉进 mod 一致性校验；改游戏逻辑的 mod 设成 false 会导致 desync。
+**Cause**: The default value of this field is **true**. If you set a cosmetic-only mod to true, the
+consistency check pulls the mod in. If you set a mod that changes game logic to false, the session
+desyncs.
 
-## 9. 同一个 mod 同时存在于 Workshop 与本地
+## 9. The same mod exists in the Workshop and on the local disk
 
-**症状**：日志 `Mod with ID <id> is loaded both via Steam and local mods directory. Disabling the Steam workshop version.`，状态是 `DisabledDuplicate`。
+**Symptom**: The log holds `Mod with ID <id> is loaded both via Steam and local mods directory. Disabling the Steam workshop version.`,
+and the state is `DisabledDuplicate`.
 
-**原因**（反编译 `ModManager.RemoveDisabledMods`）：收集所有 `ModSource.ModsDirectory` 的 id，然后把 id 相同的 `SteamWorkshop` 那条关掉。注释写明动机是「方便 modder 开发」。不是 bug。
+**Cause** (from the decompiled `ModManager.RemoveDisabledMods`): The game collects every id under
+`ModSource.ModsDirectory`, and then it disables the `SteamWorkshop` entry with the same id. The
+comment states the reason: "convenient for modders to develop". This is not a bug.
 
-**真正的风险不是冲突，是版本落后**：本地那份会**盖掉** Workshop 那份。如果玩家订阅的版本已经更新，而本地还留着一份旧的手工拷贝，游戏会静默用旧的，升级永远到不了。
+**The real risk is not a conflict. It is a version that falls behind**: The local copy
+**overrides** the Workshop copy. If the version the player subscribed to is already newer, and the
+local disk still holds an old manual copy, the game silently uses the old copy. The upgrade never
+arrives.
 
-**所以规则是**：
+**So the rule is**:
 
-- **玩家机器上不得手工拷贝依赖**。依赖由 `install_mod` 判断：玩家一份都没有，才把 `vendor/` 里随仓带的那份放进去；已经有一份（不管来自 Workshop 还是 mods 目录）就不动。判据在 `.pi/lib/mod-deps.ts`，测试在 `scripts/test-mod-install-deps.mjs`。
-- 本地拷贝对开发者是便利（改一版、立刻试），开发完要清掉。
-- 自己的 mod 更是如此：本地留着旧版，玩家订阅的新版就被关了。
+- **Never copy a dependency mod by hand on the player machine.** `install_mod` makes the decision.
+  If the player has no copy, the tool places the copy that ships with the repository in `vendor/`.
+  If the player already has a copy, from the Workshop or from the mods directory, the tool does not
+  touch it. The decision code is in `.pi/lib/mod-deps.ts`, and the test is in
+  `scripts/test-mod-install-deps.mjs`.
+- A local copy is a convenience for a developer (change a version, test it at once). Delete it when
+  you finish the work.
+- This holds even more for your own mod. If an old version stays on the local disk, the game
+  disables the newer version that the player subscribed to.
 
-**不得指望有报错**：这条只打一行 WARN，游戏照常启动，看起来一切正常。
+**Do not expect an error here**: This trap prints one WARN line only. The game starts as usual, and
+everything looks normal.
 
-## 10. 带启动参数直接跑二进制
+## 10. Starting the game binary directly with an argument
 
-**症状**：游戏闪退或 Steam 没接管。
+**Symptom**: The game exits at once, or Steam does not take over.
 
-**原因**：Steam 游戏要走 Steam 启动。带参数要用
+**Cause**: A Steam game must start through Steam. To pass an argument, use
 
 ```bash
 open "steam://rungameid/2868840//-nomods"
 ```
 
-## 11. 改了 `settings.save` 但被迁移丢掉
+## 11. A migration drops an edit of `settings.save`
 
-**症状**：手写的键启动后消失，行为不变。
+**Symptom**: A hand-written key disappears after the start, and the behaviour does not change.
 
-**原因**：`SettingsSave` 有版本迁移（本机从 v4 迁移到 v5 已经发生过一次），且键名走 `SnakeCaseLower`。
-**不得按反编译的属性名猜键名**：`PlayerAgreedToModLoading` 的落盘名是 `mods_enabled`。
+**Cause**: `SettingsSave` has a version migration (on this machine, a migration from v4 to v5 has
+already happened once), and key names use `SnakeCaseLower`.
+**Do not guess a key name from the decompiled property name**: The name that
+`PlayerAgreedToModLoading` writes to disk is `mods_enabled`.
 
-## 12. macOS 特有
+## 12. macOS specifics
 
-- mods 根在 **`.app` 包内**（`Contents/MacOS/mods/`），写进去会改动 bundle 内容。Steam 校验完整性时可能被清掉。
-- 游戏有 arm64 与 x86_64 两份数据目录，编译引用的 `sts2.dll` 要与当前进程架构一致（`managedDirFor` 会自动兜底）。
+- The mods directory is **inside the `.app` bundle** (`Contents/MacOS/mods/`). A write there
+  changes the contents of the bundle. A Steam integrity check may delete it.
+- The game has two data directories, arm64 and x86_64. The `sts2.dll` that the build references
+  must match the architecture of the current process (`managedDirFor` falls back to the right one
+  automatically).
 
-## 13. `inspect_api` 搜不到，不等于没人用
+## 13. `inspect_api` finds nothing, and that does not mean that nothing uses it
 
-**症状**：`action=search` 搜 `GetCustomAttribute` 返回 `0 match(es)`，据此判定「这个特性没人读」。
+**Symptom**: `action=search` for `GetCustomAttribute` returns `0 match(es)`, and the agent concludes
+from that result that "no code reads this attribute".
 
-**原因**：`search` 只索引**被搜 DLL 自己声明的**类型与成员。`GetCustomAttribute<T>()` 定义在 `System.Reflection`，调用它的代码在 BaseLib 里只是一个外部引用 —— 永远搜不到。
+**Cause**: `search` indexes only the types and members that **the searched DLL declares itself**.
+`GetCustomAttribute<T>()` is defined in `System.Reflection`. Code that calls it is only an external
+reference inside BaseLib. `search` never finds it.
 
-**已踩**：靠这个结论删掉了 BaseLib 强制的 `[Pool]`，结果游戏起不来（第 14 条）。
+**Already hit**: That conclusion led to the deletion of the `[Pool]` that BaseLib requires, and then
+the game did not start (trap 14).
 
-**正确做法**：要找名字用 `action=search`；要判断**有没有人用**，用 `action=decompile` 读那个类，或用 `action=il` 看调用点。`search` 的 0 命中只能证明「没声明」。
+**What to do instead**: To find a name, use `action=search`. To decide **whether any code uses it**,
+read that class with `action=decompile`, or read the call site with `action=il`. A 0 hit from
+`search` proves only that nothing declares it.
 
-## 14. `[Pool]` 缺失：游戏起不来，但报错不在 mod 加载阶段
+## 14. `[Pool]` is absent: the game does not start, and the error is not in the mod loading stage
 
-**症状**：给 `CustomCardModel` / `CustomRelicModel` 的派生类漏了 `[Pool]`，游戏启动停在错误对话框。
+**Symptom**: A class that derives from `CustomCardModel` or `CustomRelicModel` has no `[Pool]`, and
+the game stops at an error dialog at startup.
 
-**日志**（`~/Library/Application Support/SlayTheSpire2/logs/godot.log`）：
+**Log** (`~/Library/Application Support/SlayTheSpire2/logs/godot.log`):
 
 ```
 [ERROR] Encountered error on game startup! Attempting to show error dialog
@@ -175,6 +226,10 @@ open "steam://rungameid/2868840//-nomods"
    at MegaCrit.Sts2.Core.Nodes.NGame.GameStartup()
 ```
 
-**最容易看错的地方**：这条崩溃的日志里，`--- RUNNING MODDED! --- Loaded 3 mods` **照样出现过**，而且出现在报错**之前**。所以「mods 都加载了」不能作为「没问题」的证据 —— 崩溃点在 `ModelDb.Init`，比 mod 加载更晚。排障先搜 `[ERROR]` 那段堆栈。
+**The easiest thing to misread**: The log of this crash **does hold** `--- RUNNING MODDED! --- Loaded 3 mods`,
+and that line appears **before** the error. So "the mods all loaded" is not evidence that "nothing is
+wrong". The crash point is `ModelDb.Init`, which is later than mod loading. Start the diagnosis with
+the `[ERROR]` stack.
 
-**修法**：给类加 `[Pool(typeof(...))]`。加了之后**不得**再手写 `ModHelper.AddModelToPool`（`docs/game.md` §7）。
+**Fix**: Add `[Pool(typeof(...))]` to the class. After you add it, do **not** also write
+`ModHelper.AddModelToPool` by hand (`docs/game.md` §7).

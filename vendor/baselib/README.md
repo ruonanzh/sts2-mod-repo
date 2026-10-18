@@ -1,30 +1,29 @@
-# vendor/baselib —— 随仓分发的 BaseLib
+# vendor/baselib: the BaseLib that ships with this repository
 
-这是 **BaseLib 3.4.7**，上游是 [Alchyr/BaseLib-StS2](https://github.com/Alchyr/BaseLib-StS2)（MIT，见同目录 `LICENSE.txt`）。
-本仓库不改它一行，只是原样带着，让玩家克隆完就能跑内容 mod。
+This is **BaseLib 3.4.7**. The upstream project is [Alchyr/BaseLib-StS2](https://github.com/Alchyr/BaseLib-StS2) and the license is MIT. The license text is in `LICENSE.txt` in this directory.
+This repository does not change one line of it. It carries the files as they are, so that the player can run a content mod after a clone.
 
-## 里面是什么
+## What is in this directory
 
-| 文件 | 作用 |
+| File | Purpose |
 |---|---|
-| `BaseLib.dll` | 依赖库本体，游戏的 mod 加载器加载 |
-| `BaseLib.pck` | Godot 资源包，**本地化表在这里**。只有 DLL 的话，BaseLib 提供的文案读不到 |
-| `BaseLib.json` | 游戏的 mod manifest。上游那份带 UTF-8 BOM，这里去掉了（Node 的 `JSON.parse` 不收 BOM），其余字节相同 |
-| `LICENSE.txt` | 上游 MIT 原文。**不**进 mod 安装目录 |
+| `BaseLib.dll` | The dependency library itself. The mod loader of the game loads it. |
+| `BaseLib.pck` | A Godot resource pack. **The localization tables are here.** If only the DLL is present, the game cannot read the strings that BaseLib provides. |
+| `BaseLib.json` | The mod manifest of the game. The upstream file has a UTF-8 BOM and this copy does not, because Node `JSON.parse` rejects a BOM. All other bytes are the same. |
+| `LICENSE.txt` | The upstream MIT text. It does **not** go into the mod install directory. |
 
-## 什么时候会被装到玩家机器上
+## When `install_mod` installs it on the player machine
 
-只有一种情况：`install_mod` 检查到**玩家一份都没有**（mods 目录、Steam Workshop 都没有）。
+There is one case only. `install_mod` checks the mods directory and the Workshop directory. It installs the copy only when **the player has no copy at all** in either one.
 
-已经有一份时它**不动**。原因见 `docs/traps.md` 第 9 条：加载器优先 `mods_directory`，
-本地一份会**盖掉** Workshop 那份，于是订阅更新永远到不了，日志只有一行 WARN。
+If a copy already exists, `install_mod` does **not** touch it. The reason is item 9 in `docs/traps.md`. The loader gives priority to `mods_directory`. A local copy then **overrides** the copy from the Workshop. Then an update from a subscription never arrives and the log has one WARN line only.
 
-判据的实现在 `.pi/lib/mod-deps.ts`，测试是 `scripts/test-mod-install-deps.mjs`。
+The rule that decides this case is in `.pi/lib/mod-deps.ts`. The test is `scripts/test-mod-install-deps.mjs`.
 
-## 怎么升级
+## How to upgrade
 
-1. 从上游 release 取 `BaseLib.dll` / `BaseLib.pck` / `BaseLib.json`。
-2. 去掉 `BaseLib.json` 的 BOM，用 Python 校一遍它仍是合法 JSON：
+1. Get `BaseLib.dll`, `BaseLib.pck`, and `BaseLib.json` from the upstream release.
+2. Delete the BOM from `BaseLib.json`. Then use Python to check that the file still parses as JSON:
 
    ```sh
    python3 -c "
@@ -36,13 +35,13 @@
    p.write_bytes(b)"
    ```
 
-3. 核对 `sha256(BaseLib.dll)` 与上游 release 一致。
-4. **同时**改三处，否则三处说的是不同的版本：
-   - `THIRD_PARTY_LICENSES.md` 的版本列
-   - 各内容 mod manifest 的 `dependencies[].min_version`（没用到新 API 时**不必**跟着抬高）
-   - 本文件顶部的版本号
+3. Check that `sha256(BaseLib.dll)` matches the upstream release.
+4. Change all three places at the same time. If you change one only, the three places name different versions.
+   - The version column in `THIRD_PARTY_LICENSES.md`.
+   - `dependencies[].min_version` in each content mod manifest. If the mod does not use a new API, you do **not** have to raise it.
+   - The version number at the top of this file.
 
-## 为什么不跟着 Workshop 走
+## Why it does not follow the Workshop
 
-Workshop 订阅是玩家的动作，我们控制不了版本，也没法在玩家没订阅时让 mod 跑起来。
-带一份 + 只填空，两个目标同时成立，代价是我们得跟上游升级。这个代价换的是首次安装零步骤。
+A subscription in the Workshop is an action of the player. We cannot control the version. We also cannot make a mod run when the player has no subscription.
+We ship one copy and we only fill an empty gap. Both goals then hold at the same time. The cost is that we must follow the upstream upgrades. That cost buys a first install with zero steps.

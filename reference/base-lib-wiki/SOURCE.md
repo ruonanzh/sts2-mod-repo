@@ -1,34 +1,39 @@
-# 这份快照从哪来
+# Where this snapshot comes from
 
-**不得手改这个目录里的任何文件。** 它们是从上游逐字复制的；改了之后下次 diff 就全是噪音，
-快照也就不再是「上游怎么说」的证据。
+**Do not edit any file in this directory.** The upstream pages are copied verbatim. An edit makes
+the next diff noise, and the snapshot stops being evidence of what upstream says.
 
-| 项 | 值 |
+|item|value|
 |---|---|
-| 上游 | [`Alchyr/BaseLib-Wiki`](https://github.com/Alchyr/BaseLib-Wiki)（MIT） |
-| 分支 | `main` |
-| commit | `5834ad4b8c77e5204347a2426e8434fbb246a554` |
-| 抓取时间 | 2026-10-18 |
-| 上游提交时间 | 2026-09-11T09:59:00Z |
-| 页面数 | 35 |
+|upstream|[`Alchyr/BaseLib-Wiki`](https://github.com/Alchyr/BaseLib-Wiki) (MIT)|
+|branch|`main`|
+|commit|`5834ad4b8c77e5204347a2426e8434fbb246a554`|
+|fetched|2026-10-18|
+|upstream commit date|2026-09-11T09:59:00Z|
+|pages|35|
 
-## 过没过期怎么判断
+## How to tell whether this snapshot is stale
 
-上游的 wiki 跟着 BaseLib 的 release 走。所以：
+The upstream wiki follows the BaseLib releases. Use this procedure:
 
-1. 看 `vendor/baselib/BaseLib.json` 里的 `version`。
-2. 如果它比这份快照对应的版本新，就跑一次同步，再看有无改动：
+1. Read the `version` field in `vendor/baselib/BaseLib.json`.
+2. If that version is newer than the one this snapshot matches, compare against upstream:
 
 ```sh
-node scripts/sync-base-lib-wiki.mjs --check   # 只比对，不写盘
-node scripts/sync-base-lib-wiki.mjs           # 真的抓一遍
+node scripts/sync-base-lib-wiki.mjs --check
 ```
 
-## 哪些页可能没有内容
+The command exits with code 1 when upstream and this snapshot differ. Run the same command without
+`--check` to fetch the new pages.
 
-上游有些页只有标题（例如 `scenes/creature-visuals.md` 的 Spine 一节、`models/custom-card.md`
-的 `CardModel Documentation`）。**空着就是上游还没写**，不是我们漏抓 —— 遇到这种情况只能反编译。
+## Pages that may be empty upstream
 
-## 索引
+Some pages have a heading and no text below it. Two examples are the Spine section in
+`scenes/creature-visuals.md` and the `CardModel Documentation` section in
+`models/custom-card.md`. An empty section means upstream has not written it yet. It is not a
+missing file. For those topics, read the decompiled assembly instead.
 
-自己写的导读在 [`INDEX.md`](INDEX.md)。先读它，别一页页翻。
+## Index
+
+The hand-written index is [`INDEX.md`](INDEX.md). Read it first. Do not page through the
+snapshot.

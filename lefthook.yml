@@ -1,17 +1,21 @@
-# 骨架仓的 pre-commit：只做「与游戏无关」的机器检查。
-# 需要本机装了 lefthook（brew install lefthook，然后 lefthook install）。
-# 没装也能手跑：node scripts/check-doc-refs.mjs / node scripts/check-prompt-standard-zh.mjs
+# Pre-commit for this game repository. It runs only checks that do not touch the game.
+# It needs lefthook on the machine (brew install lefthook, then lefthook install).
+# You can also run each check by hand, for example: node scripts/check-doc-refs.mjs
 pre-commit:
   parallel: true
   commands:
     doc-refs:
-      # 文档里的链接与反引号路径必须真的存在。踩过：SKILL 里写错的相对路径、指向别的仓的文件名。
+      # Every link and every backticked repository path must exist. This caught wrong relative
+      # paths in a SKILL, and file names that belong to another repository.
       run: node scripts/check-doc-refs.mjs
-    prompt-standard-zh:
-      # 中文提示词规范里能机器判的三条（情态词 / 箭头 / 术语）。规则文本随仓放在 docs/prompt-standard.md。
-      run: node scripts/check-prompt-standard-zh.mjs
+    prompt-standard-en:
+      # The machine part of the English writing rules: semicolons, symbols, open lists, marketing
+      # words, the word folder, and sentences longer than 25 words. Rules: docs/prompt-standard.md.
+      run: node scripts/check-prompt-standard-en.mjs
     mod-install-deps:
-      # install_mod「只填空，不覆盖」的判据。改成覆盖时本机看不出问题，玩家那边会被静默钉住旧版本。
+      # The rule behind install_mod: fill an empty gap, never overwrite. If it ever starts
+      # overwriting, this machine looks fine and the player silently keeps an old dependency.
       run: node scripts/test-mod-install-deps.mjs
-    # 该游戏若要再加检查（例如探针参数与工具面对齐、接口台账），在这里追加一条，
-    # 并把对应脚本放进 scripts/；不要在骨架里预留某游戏专用的检查。
+    # If this game needs another check, for example probe options that must match the tool surface,
+    # add a command here and put the script in scripts/. Do not reserve a hook for one game in a
+    # skeleton repository.

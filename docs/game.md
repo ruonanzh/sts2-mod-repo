@@ -1,58 +1,64 @@
-# 游戏机制与加载流程
+# Game mechanics and load flow
 
-本页的每条结论都有出处：反编译 `sts2.dll`，或在本机实测。改动前先确认出处仍然成立。
+Every conclusion on this page has a source: the decompiled `sts2.dll`, or a measurement on this
+machine. Before you change a conclusion, check that its source still holds.
 
-## 1. 加载流程
+## 1. Load flow
 
-`MegaCrit.Sts2.Core.Modding.ModManager.Initialize(fileIo, settings, gameVersion)`，反编译后的实际顺序：
+This is the real order after a decompilation. The entry point is
+`MegaCrit.Sts2.Core.Modding.ModManager.Initialize(fileIo, settings, gameVersion)`.
 
 ```csharp
-if (CommandLineHelper.HasArg("nomods")) { State = Skipped; return; }      // -nomods 直接跳过
-AppDomain.CurrentDomain.AssemblyResolve += HandleAssemblyResolveFailure;  // 放宽程序集版本绑定
+if (CommandLineHelper.HasArg("nomods")) { State = Skipped; return; }      // -nomods skips everything
+AppDomain.CurrentDomain.AssemblyResolve += HandleAssemblyResolveFailure;  // relax the assembly version binding
 string dir = Path.GetDirectoryName(OS.GetExecutablePath());
 foreach (var root in new[] { Path.Combine(dir, "mods"),
                              Path.Combine(dir, "mods_STEAMTEST") })
     if (fileIo.DirectoryExists(root)) ReadModsInDirRecursive(root, ...);
-if (SteamInitializer.Initialized) await ReadSteamMods();                  // 真正的 Workshop
+if (SteamInitializer.Initialized) await ReadSteamMods();                  // the real Workshop
 if (_mods.Count == 0) { State = Initialized; return; }
-RemoveDisabledMods();          // Workshop 与本地同名时，故意只留本地那份
-SortModList(_settings?.ModList ?? ...);   // Kahn 拓扑排序，依赖先加载
+RemoveDisabledMods();          // on a name clash with Workshop, keep only the local copy on purpose
+SortModList(_settings?.ModList ?? ...);   // Kahn topological sort, dependencies load first
 foreach (var m in _mods) TryLoadMod(m);
 Log.Info($" --- RUNNING MODDED! --- Loaded {loaded} mods ({_mods.Count} total)");
 ```
 
-单个 mod 的装载：
+The load of one mod:
 
 ```csharp
-if (!PlayerAgreedToModLoading) { mod.state = Disabled; return; }   // 总开关，见 §4
+if (!PlayerAgreedToModLoading) { mod.state = Disabled; return; }   // global load switch, see §4
 var dll = Path.Combine(mod.path, modId + ".dll");
 assembly = loadContext.LoadFromAssemblyPath(dll);
 var pck = Path.Combine(mod.path, modId + ".pck");
-ProjectSettings.LoadResourcePack(pck);                             // 单参 = replaceFiles: true
+ProjectSettings.LoadResourcePack(pck);                             // one argument = replaceFiles: true
 ```
 
-`mods_STEAMTEST/` 是本地冒充 Workshop 的调试口，被当作 `ModSource.SteamWorkshop` 读取。
+`mods_STEAMTEST/` is a debug hook that makes local mods look like a Workshop install.
+The loader reads that directory as `ModSource.SteamWorkshop`.
 
-## 2. 清单（`<id>.json`）
+## 2. Manifest (`<id>.json`)
 
-反编译 `ModManifest` 得到的**全部 10 个键**。多写的键会被 `System.Text.Json` 忽略——所以拼错不会报错，只会静默失效。
+These are **all 10 keys** of the decompiled `ModManifest`. `System.Text.Json` ignores any extra
+key. A spelling error therefore raises no error, and the key silently does nothing.
 
-| 键 | 类型 | 说明 |
+| Key | Type | Description |
 |---|---|---|
-| `id` | string | **必填**。同时是 `<id>.dll` / `<id>.pck` 的文件名前缀 |
-| `name` | string | 显示名 |
-| `author` | string | 作者；无 `[ModInitializer]` 时也参与 Harmony 实例名 |
-| `description` | string | 显示用 |
-| `version` | string | 语义化版本。解析失败时 `Mod.version` 为 null，依赖方会 FAILED |
-| `has_pck` | bool | 为 true 但没有 `.pck` 时，装载会抛异常 |
-| `has_dll` | bool | 为 true 但没有 `.dll` 时只打错误、程序集不加载 |
-| `dependencies` | `[{id, min_version}]` | 缺失则 FAILED，版本不足则 FAILED |
-| `affects_gameplay` | bool | 默认 **true**。设错会让多人联机 desync 或被挡 |
-| `min_game_version` | string | 装机版本低于它时判为不支持、不加载。不写只出 WARN |
+| `id` | string | **Required.** It is also the file name prefix of `<id>.dll` and `<id>.pck` |
+| `name` | string | Display name |
+| `author` | string | Author. When the mod has no `[ModInitializer]`, the loader also uses it in the Harmony instance name |
+| `description` | string | For display |
+| `version` | string | Semantic version. When parsing fails, `Mod.version` is null and the dependent mod reports FAILED |
+| `has_pck` | bool | If the key is true and the file `.pck` is absent, the load throws an exception |
+| `has_dll` | bool | If the key is true and the file `.dll` is absent, the loader logs an error only and does not load the assembly |
+| `dependencies` | `[{id, min_version}]` | If a dependency is absent, the mod reports FAILED. If its version is too low, the mod also reports FAILED |
+| `affects_gameplay` | bool | Defaults to **true**. A wrong value causes a desync in multiplayer, or the game blocks the mod |
+| `min_game_version` | string | If the installed game version is lower, the game marks the mod unsupported and does not load it. If you omit the key, the game logs a WARN only |
 
-**目录里只能有一个 `.json`。** `ReadModsInDirRecursive` 把任何 `.json` 都当清单读，缺 `id` 就报错跳过；多出来的那个若带 `id` 就会变成第二个 mod，或触发 `DUPLICATE_ID`。
+**A mod directory can hold one `.json` only.** `ReadModsInDirRecursive` reads every `.json` as a
+manifest, and reports an error and skips the file when the `id` is absent. If the extra file has an
+`id`, it becomes a second mod, or it triggers `DUPLICATE_ID`.
 
-## 3. 入口
+## 3. Entry point
 
 ```csharp
 [ModInitializer(nameof(Init))]      // MegaCrit.Sts2.Core.Modding.ModInitializerAttribute
@@ -62,11 +68,15 @@ public static class Entry
 }
 ```
 
-加载器用 `BindingFlags.Static | Public | NonPublic` 找方法，然后 `method.Invoke(null, null)`——**必须 static、必须无参**。写成实例方法会说 `... but it's not static! Declare it to be static`。
+The loader finds the method with `BindingFlags.Static | Public | NonPublic`. It then calls
+`method.Invoke(null, null)`. **The method must be static, and it must have no parameter.** If you
+write an instance method, the loader reports
+`... but it's not static! Declare it to be static`.
 
-没有 `[ModInitializer]` 时，加载器 auto `new Harmony(author + "." + id).PatchAll(assembly)`。
+If the mod has no `[ModInitializer]`, the loader automatically runs
+`new Harmony(author + "." + id).PatchAll(assembly)`.
 
-## 4. 加载总开关（最容易漏的一步）
+## 4. The global load switch (the step missed most often)
 
 ```csharp
 // ModManager
@@ -76,56 +86,72 @@ else if (!PlayerAgreedToModLoading) {
 }
 ```
 
-- 反编译里叫 `ModSettings.PlayerAgreedToModLoading`，**落盘名是 `mods_enabled`**（`SettingsSave` v5，`SnakeCaseLower`）。
-- 位置：`~/Library/Application Support/SlayTheSpire2/steam/<steamId>/settings.save`（mac）。
-- 为 `false` 时**所有** mod 都 `Disabled`，日志只有上面那一句，**不报错、不提示怎么开**。
-- 这个仓库的 `install_mod` 会读并报告这个开关（判据在 `.pi/lib/game-settings.ts`）。
+- The decompiled name is `ModSettings.PlayerAgreedToModLoading`. **The on-disk name is
+  `mods_enabled`** (`SettingsSave` v5, `SnakeCaseLower`).
+- Location: `~/Library/Application Support/SlayTheSpire2/steam/<steamId>/settings.save` (macOS).
+- When the value is `false`, **all** mods are `Disabled`, and the log holds the line above only.
+  **The game reports no error and gives no hint on how to enable mods.**
+- `install_mod` in this repository reads this switch and reports it. The criterion is in
+  `.pi/lib/game-settings.ts`.
 
-## 5. 路径
+## 5. Paths
 
-| 用途 | macOS | Windows |
+| Purpose | macOS | Windows |
 |---|---|---|
-| 游戏目录 | `.../steamapps/common/Slay the Spire 2` | 同（Steam 库下） |
-| 托管程序集 | `SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64/` | `data_sts2_windows_x86_64/` |
-| mod 根 | `SlayTheSpire2.app/Contents/MacOS/mods/` | `mods/` |
-| 玩家数据 `user://` | `~/Library/Application Support/SlayTheSpire2/` | `%APPDATA%/SlayTheSpire2/` |
-| 日志 | `<用户数据>/logs/godot.log` | 同 |
+| Game directory | `.../steamapps/common/Slay the Spire 2` | The same (under the Steam library) |
+| Managed assemblies | `SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64/` | `data_sts2_windows_x86_64/` |
+| Mod directory | `SlayTheSpire2.app/Contents/MacOS/mods/` | `mods/` |
+| Player data `user://` | `~/Library/Application Support/SlayTheSpire2/` | `%APPDATA%/SlayTheSpire2/` |
+| Log | `<user data>/logs/godot.log` | The same |
 
-mac 有两份数据目录（`data_sts2_macos_arm64` / `data_sts2_macos_x86_64`），Godot 按进程架构选。`managedDirFor` 在写死的那份不存在时退到同级兄弟目录。
+macOS has two data directories (`data_sts2_macos_arm64` / `data_sts2_macos_x86_64`), and Godot picks
+one by process architecture. When the hard-coded directory is absent, `managedDirFor` falls back to
+the sibling directory at the same level.
 
-**mods 根不会被游戏自动创建**：`Initialize` 只在 `DirectoryExists` 为 true 时扫描。
+**The game does not create the mods directory for you.** `Initialize` scans a directory only when
+`DirectoryExists` returns true.
 
-## 6. 资源与美术（v1 不用，但要知道）
+## 6. Assets and art (unused in v1, but know it)
 
-- 卡图走 `AtlasManager`：`res://images/atlases/<图集>.tpsheet` + PNG，`AtlasResourceLoader` 拦截 `.sprites/*.tres`。
-- 生物视觉是 Spine：`res://scenes/creature_visuals/<id小写>.tscn`，`NCreatureVisuals` 只认 `%Visuals` 是 `SpineSprite`。
-- **PCK 能覆盖原版路径**：`ProjectSettings.LoadResourcePack(pack, replaceFiles = true, ...)`，后挂者胜。
-- 改原版卡图的生态做法是 patch `CardModel.PortraitPath` 的 getter，且必须带 `[HarmonyPriority(Priority.First)]`（BaseLib / RitsuLib / ATA 都 prefix 同一个 getter）。
+- Card art goes through `AtlasManager`. It uses `res://images/atlases/<atlas>.tpsheet` plus a PNG.
+  `AtlasResourceLoader` intercepts `.sprites/*.tres`.
+- Creature visuals use Spine: `res://scenes/creature_visuals/<id in lowercase>.tscn`.
+  `NCreatureVisuals` accepts the scene only when `%Visuals` is a `SpineSprite`.
+- **A PCK can override a vanilla path.** `ProjectSettings.LoadResourcePack(pack, replaceFiles = true, ...)`
+  means the pack that loads last wins.
+- The usual approach in the ecosystem to change a vanilla card image is to patch the getter of
+  `CardModel.PortraitPath`. That patch must carry `[HarmonyPriority(Priority.First)]`. BaseLib,
+  RitsuLib, and ATA all prefix the same getter.
 
-### 6.1 本地化：`res://` 只认 mod 自己的 PCK
+### 6.1 Localization: `res://` accepts only the mod's own PCK
 
-反编译 `ModManager.GetModdedLocTables`：
+This is the decompiled `ModManager.GetModdedLocTables`:
 
 ```csharp
 string text = $"res://{mod.manifest.id}/localization/{language}/{file}";
 if (ResourceLoader.Exists(text)) yield return text;
 ```
 
-只查 `res://`。**DLL-only 的 mod 带不了 json 本地化** —— `res://<id>/` 这个前缀只有该 mod 的 PCK 挂上来之后才存在。
+The loader checks `res://` only. **A DLL-only mod cannot ship JSON localization.** The prefix
+`res://<id>/` exists only after the loader mounts the PCK of that mod.
 
-两条出路：
+Two options:
 
-| 做法 | 需要 PCK | 适合 |
+| Approach | Needs a PCK | Fits |
 |---|---|---|
-| `<id>/localization/<eng\|zhs>/cards.json` | **要** | 文案多、要翻译 |
-| C# 里重写 BaseLib 的 `ILocalizationProvider.Localization`（`CardLoc` / `PowerLoc` / `RelicLoc`… 有隐式转换到 `List<(string,string)>`） | 不需要 | 文案少、v1 只做中文或英文 |
+| `<id>/localization/<eng\|zhs>/cards.json` | **Yes** | Many strings, translation needed |
+| Rewrite the BaseLib `ILocalizationProvider.Localization` in C# (`CardLoc`, `PowerLoc`, `RelicLoc`, and the other location classes have an implicit conversion to `List<(string,string)>`) | No | Few strings, v1 ships Chinese or English only |
 
-`reference/example_card` 用的是第二条。缺 key 时游戏只报错不崩，所以**症状是卡牌没名字，不是闪退**。
+`reference/example_card` uses the second option. When a key is absent, the game logs an error and
+does not crash, so **the symptom is a card with no name, not a crash**.
 
-## 7. 内容扩展（BaseLib）
+## 7. Content extension (BaseLib)
 
-- 继承 `Custom*Model`（`CustomCardModel` / `CustomRelicModel` / `CustomPotionModel` / `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` …），构造函数会自动 `CustomContentDictionary.AddModel(GetType())`。
-- **池归属用 `[Pool(typeof(IroncladCardPool))]`，这条是必需的。** 反编译 `BaseLib.Patches.Content.CustomContentDictionary.AddModel`：
+- Extend a `Custom*Model` class (`CustomCardModel` / `CustomRelicModel` / `CustomPotionModel` /
+  `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` / the other
+  model classes). The constructor automatically calls `CustomContentDictionary.AddModel(GetType())`.
+- **Pool membership uses `[Pool(typeof(IroncladCardPool))]`, and this attribute is mandatory.**
+  This is the decompiled `BaseLib.Patches.Content.CustomContentDictionary.AddModel`:
 
   ```csharp
   PoolAttribute poolAttribute = modelType.GetCustomAttribute<PoolAttribute>()
@@ -134,17 +160,36 @@ if (ResourceLoader.Exists(text)) yield return text;
   ModHelper.AddModelToPool(poolAttribute.PoolType, modelType);
   ```
 
-  没有它，类在**构造时**就抛。异常传到 `ModelDb.Init`，再传到 `NGame.GameStartup`，结果是**游戏起不来**（`traps.md` 第 14 条）。`[Pool]` **可继承**：多张卡可以共用一个带特性的基类。加了 `[Pool]` 之后**不得**再手写 `ModHelper.AddModelToPool`。BaseLib 已经调过，重复加会让同一张卡进池两次。
-- 不继承 `Custom*Model`、只用 `ICustomModel` 标记时，必须在默认构造函数里调 `CustomContentDictionary.AddModel(GetType())`，`[Pool]` 才会生效。
-- 本地化：`localization/<lang>/{cards,relics,powers,characters,ancients,card_keywords,static_hover_tips}.json`，键 `MODID-MODEL_ID.title` / `.description`。DLL-only 的 mod 带不了这份 json（见上文的 `res://` 限制），改在 C# 里实现 `ILocalizationProvider`。
-- **缺本地化只打一条 error，不崩**（上游 `Features.md` 明写）。所以「卡没有名字」和「卡加载失败」是两件事，别混。
-- **版本号不写在这里。** 装的是哪一版看 `vendor/baselib/BaseLib.json` 的 `version` 字段；本页写过一次 `3.3.0+`，已经过期。
-- **官方 wiki 的逐字快照在 `reference/base-lib-wiki/`**，先读那份 `INDEX.md` 找页，再用 `inspect_api` 查真名。
+  Without that attribute, the class throws **at construction time**. The exception reaches
+  `ModelDb.Init` and then `NGame.GameStartup`. The result is **a game that does not start**
+  (`traps.md` trap 14). **`[Pool]` is inheritable.** Many cards can share one base class that
+  carries the attribute. After you add `[Pool]`, do **not** write `ModHelper.AddModelToPool` by
+  hand. BaseLib already calls it, and a second call puts the same card into the pool twice.
+- If the class does not extend `Custom*Model` and carries the `ICustomModel` marker only, its
+  default constructor must call `CustomContentDictionary.AddModel(GetType())`. Only then does
+  `[Pool]` take effect.
+- Localization: `localization/<lang>/{cards,relics,powers,characters,ancients,card_keywords,static_hover_tips}.json`
+  with the keys `MODID-MODEL_ID.title` / `.description`. A DLL-only mod cannot ship this JSON,
+  because of the `res://` limit above. That mod implements `ILocalizationProvider` in C# instead.
+- **An absent localization entry logs one error only and does not crash.** The upstream
+  `Features.md` states this. A card with no name and a card that fails to load are therefore two
+  different problems. Do not merge them.
+- **The version number does not belong on this page.** To find the installed version, read the
+  `version` field of `vendor/baselib/BaseLib.json`. An earlier revision of this page said `3.3.0+`,
+  and that value is out of date.
+- **The verbatim snapshot of the official wiki is in `reference/base-lib-wiki/`.** Read that
+  `INDEX.md` first to find the page, then use `inspect_api` to find the real name.
 
-## 8. 用 fetch 查名字的边界
+## 8. Limits when you find a name with fetch
 
-`inspect_api` 同时读**游戏的** `sts2.dll`（6381 个类型）与**BaseLib 的** `BaseLib.dll`（1015 个类型），结果带 `[game]` / `[baselib]` 标签。所以：
+`inspect_api` reads both the `sts2.dll` of the **game** (6381 types) and the `BaseLib.dll` of
+**BaseLib** (1015 types), and each result carries a `[game]` or `[baselib]` label. Therefore:
 
-- 游戏自己的类型都能查到并反编译。
-- BaseLib 的类型能查，但前提是**本机已 restore 过它**（某个 mod 引用它并 restore 之后，包会落在 NuGet 缓存里）。没 restore 时工具会说明并只搜游戏。
-- `sts2.xml` 只是 `<summary>` 注释的集合（19635 条），**没有注释的成员不在里面**。例如 `CardModel.PortraitPath` 就没有文档，只能靠反编译看。所以查成员名字一律用 `action=source` 读类型源码。
+- Every type of the game is available for a lookup and for decompilation.
+- A BaseLib type is available only if this machine restored it before. The package lands in the
+  NuGet cache after some mod references it and restores. If you never restored the package,
+  the tool explains this and searches the game only.
+- `sts2.xml` is a collection of `<summary>` comments only (19635 entries), and **a member with no
+  comment is not in it**. `CardModel.PortraitPath` has no documentation, for example, so you must
+  decompile the type to read it. To find a member name, always read the type source with
+  `action=source`.
