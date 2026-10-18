@@ -280,3 +280,35 @@ lowercase, and `docs/game.md` section 6 shows the exact request line.
 postfix on the getter. `reference/example_card/StartingDeckPatch.cs` does exactly that, and
 `Ironclad.StartingDeck` returns `IEnumerable<CardModel>`, so the postfix appends one card and leaves
 the other 10 alone.
+
+## 16. A BETA status card appears where a mod card used to be
+
+**Symptom**: the player removed or disabled a mod, loaded an old run, and the deck holds a status
+card with BETA art. Its text says the card was removed in a recent update, it draws a card, it
+removes itself from the deck, and it exhausts. The deck has one more card than it should.
+
+**Cause**: this is the game's fallback, not corruption. A run save stores card ids as strings. When
+a mod is gone, its id resolves to nothing, and the save path deliberately substitutes a placeholder:
+
+```csharp
+/// Obtains a card by ID, or falls back to the deprecated card if it's not found.
+/// This should only be used in save loading where it's okay to fall back to deprecated content.
+public static CardModel CardOrDeprecated(ModelId id)
+{
+    return ModelDb.GetByIdOrNull<CardModel>(id) ?? ModelDb.Card<DeprecatedCard>();
+}
+```
+
+`SaveUtil` has the same fallback for every content type: `CardOrDeprecated`, `RelicOrDeprecated`,
+`PotionOrDeprecated`, `EncounterOrDeprecated`, `EventOrDeprecated`, `AncientEventOrDeprecated`,
+`ModifierOrDeprecated`, `EnchantmentOrDeprecated`, `MonsterOrDeprecated`, `CharacterOrDeprecated`,
+`ActOrDeprecated`.
+
+**What to tell the player**: nothing is broken. Play the card and it leaves the deck. The run
+continues and the save stays valid.
+
+**What not to conclude**: do not read `ModelDb.GetById` and decide that a missing model breaks a
+save. `GetById` throws `ModelNotFoundException`, but save loading never calls it.
+
+**Related**: the stale id also stays in `discovered_cards` in `progress.save`. The card library
+builds a `HashSet<ModelId>` from that list and compares by id, so a stale entry matches nothing.
