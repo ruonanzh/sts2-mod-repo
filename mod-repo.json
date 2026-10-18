@@ -37,8 +37,7 @@
       {
         "id": "Alchyr.Sts2.BaseLib",
         "label": "baselib",
-        "assembly": "BaseLib.dll",
-        "docs": "BaseLib.xml"
+        "assembly": "BaseLib.dll"
       }
     ]
   },

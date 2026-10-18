@@ -1,11 +1,15 @@
 /**
- * 可查的程序集清单（**共享**：inspect_api 用它，将来 validate_mod 也能用它判断
+ * 可查的程序集清单（**共享**：inspect_api 用它；validate_mod 将来也能用它判断
  * 「你引用了 BaseLib 却没在 manifest 里声明依赖」）。
  *
  * 两类来源，路径规则完全不同：
  *   · 游戏程序集：来自 `mod-repo.json` 的 `compile.references`，落在游戏数据目录里；
  *   · 包程序集：来自 `compile.packages`，落在 NuGet 全局缓存里，**版本不写进清单**
  *     （取本机已 restore 的最高版本——那才是编译时真正用的那一份）。
+ *
+ * 每个来源自带一个「根目录」：`tools/api-probe` 用 `--managed <dir> --dll <name>`，
+ * 而 `--dll` 是按 `--managed` 解析的相对名。所以工具要**按根目录分组跑多次**，
+ * 这不是妥协：两个根本来就不在同一个目录树里。
  */
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -17,8 +21,8 @@ export interface ApiSource {
   /** 程序集短名，用于报错与说明 */
   assembly: string;
   dllPath: string;
-  /** 同目录的 XML 文档（可能不存在：文档是部分覆盖的） */
-  docPath: string | null;
+  /** api-probe 的 --managed：就是 dll 所在目录 */
+  root: string;
   /** 包来源的版本号；游戏程序集为 null */
   version: string | null;
 }
@@ -29,11 +33,10 @@ export interface ResolvedSources {
   notes: string[];
 }
 
-interface PackageSpec {
+export interface PackageSpec {
   id: string;
   label: string;
   assembly: string;
-  docs?: string;
 }
 
 /** 语义化版本比较（够用即可：只处理数字段）。 */
@@ -102,7 +105,7 @@ export interface SourceInputs {
   packages: PackageSpec[];
 }
 
-/** 把清单解析成「实际能打开的程序集 + 文档」列表。缺项只记 NOTE，不抛。 */
+/** 把清单解析成「实际能打开的程序集」列表。缺项只记 NOTE，不抛。 */
 export function resolveApiSources(inputs: SourceInputs): ResolvedSources {
   const sources: ApiSource[] = [];
   const notes: string[] = [];
@@ -114,12 +117,11 @@ export function resolveApiSources(inputs: SourceInputs): ResolvedSources {
         notes.push(`NOTE: the game assembly ${ref} was not found in the data directory, so it was skipped.`);
         continue;
       }
-      const doc = join(dirname(dll), `${basename(dll, ".dll")}.xml`);
       sources.push({
         label: "game",
         assembly: basename(dll, ".dll"),
         dllPath: dll,
-        docPath: existsSync(doc) ? doc : null,
+        root: dirname(dll),
         version: null,
       });
     }
@@ -135,12 +137,11 @@ export function resolveApiSources(inputs: SourceInputs): ResolvedSources {
       );
       continue;
     }
-    const doc = spec.docs ? join(dirname(hit.dllPath), spec.docs) : null;
     sources.push({
       label: spec.label,
       assembly: basename(hit.dllPath, ".dll"),
       dllPath: hit.dllPath,
-      docPath: doc && existsSync(doc) ? doc : null,
+      root: dirname(hit.dllPath),
       version: hit.version,
     });
   }

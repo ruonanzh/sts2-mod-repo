@@ -93,7 +93,7 @@ export interface GameConfig {
   sdkMajor?: number;
   assemblies?: string[];
   /** 也要能查 API 的 NuGet 包程序集（来自 `compile.packages`） */
-  packages?: { id: string; label: string; assembly: string; docs?: string }[];
+  packages?: { id: string; label: string; assembly: string }[];
   modules?: string[];
   /** 该游戏允许的 config action 名。空数组 = 不校验 action；缺省 = 用骨架的默认集合。 */
   actions?: string[];
@@ -130,7 +130,7 @@ export function readGameConfig(cwd: string): GameConfig {
       managedDir?: string | Record<string, string>;
       references?: string[];
       sdkMajor?: number;
-      packages?: { id: string; label: string; assembly: string; docs?: string }[];
+      packages?: { id: string; label: string; assembly: string }[];
     };
     modInstall?: { path?: string | Record<string, string> };
     workshop?: { supported?: boolean };

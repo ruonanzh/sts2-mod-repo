@@ -1,76 +1,50 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import { runAsync } from "../lib/proc";
 import { managedDirFor, readGameConfig, readModRepoConfig, readState } from "../lib/game-paths";
 import { resolveApiSources, type ApiSource } from "../lib/api-sources";
 
 /**
- * inspect_api -- find the exact name of a type, then read its source.
+ * inspect_api -- find the exact name of a type or member, then read its C#.
  *
- * The API surface a mod codes against spans more than one assembly. For Slay the Spire 2
- * a card inherits BaseLib's `CustomCardModel`, which itself inherits the game's
- * `CardModel`, so half the names a mod needs come from `sts2.dll` and half from
- * `BaseLib.dll`. A tool that can only see one of them invites guesses for the other half,
- * and a guess fails as CS0246/CS0012 without saying which of the two mistakes was made.
- * So this tool searches every assembly declared in mod-repo.json and labels each hit.
+ * The API a mod codes against spans more than one assembly. For Slay the Spire 2 a card
+ * inherits BaseLib's `CustomCardModel`, whose base is the game's `CardModel`, so half the
+ * names come from `sts2.dll` and half from `BaseLib.dll`. A tool that sees only one of them
+ * invites guesses for the other half, and a guess fails as CS0246/CS0012 without saying
+ * which mistake was made. So this searches every assembly declared in mod-repo.json and
+ * labels each result.
  *
- * Where the data comes from:
- *   - type names: `ilspycmd -l c <assembly>`, which is complete (6381 game types, 1015 in
- *     BaseLib) and takes about 0.3s per assembly.
- *   - summaries: the XML doc files next to each assembly. These are partial by nature -
- *     sts2.xml documents 15561 of 19635 members and BaseLib.xml omits CustomCardModel
- *     entirely - so a missing summary must never be read as a missing type. That is why
- *     search matches type names only, never summary text.
+ * Backend: `tools/api-probe`, which links the vendored ICSharpCode.Decompiler 11.1
+ * (see THIRD_PARTY_LICENSES.md). It is vendored rather than installed as a global dotnet
+ * tool so that the version is fixed and no network is needed; the trade is one build step,
+ * which check_runtime performs. Vendored code is copied unmodified from the Unity Mono
+ * skeleton, where it already carries fixes learned in use.
+ *
+ * One run per source root. api-probe resolves `--dll` relative to `--managed`, and the game
+ * directory and the NuGet cache are separate trees, so grouping by root is the honest shape,
+ * not a workaround.
  */
 
-interface DocIndex {
-  byName: Map<string, string>;
-}
+const PROBE_DIR = join("tools", "api-probe");
+const PROBE_DLL = join("bin", "Release", "net8.0", "api-probe.dll");
 
-function plain(xml: string): string {
-  return xml
-    .replace(/<see cref="[^:]+:([^"]+)"\s*\/>/g, (_m, ref: string) => ref.split(".").pop() ?? ref)
-    .replace(/<[^>]+>/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+/** Which api-probe action each tool action maps to. */
+const ACTION_MAP: Record<string, string> = {
+  search: "search",
+  source: "decompile",
+  members: "members",
+};
 
-/** Merge the doc files of every source. Namespaces differ, so member names cannot collide. */
-function readDocIndex(sources: ApiSource[]): DocIndex {
-  const byName = new Map<string, string>();
-  for (const src of sources) {
-    if (!src.docPath) continue;
-    let text: string;
-    try {
-      text = readFileSync(src.docPath, "utf8");
-    } catch {
-      continue;
-    }
-    const chunks = text.split('<member name="');
-    for (let i = 1; i < chunks.length; i++) {
-      const chunk = chunks[i];
-      const nameEnd = chunk.indexOf('"');
-      if (nameEnd < 0) continue;
-      const name = chunk.slice(0, nameEnd);
-      const sumStart = chunk.indexOf("<summary>");
-      if (sumStart < 0) continue;
-      const sumEnd = chunk.indexOf("</summary>", sumStart);
-      if (sumEnd < 0) continue;
-      byName.set(name, plain(chunk.slice(sumStart + "<summary>".length, sumEnd)));
-    }
-  }
-  return { byName };
+interface ProbeRun {
+  source: ApiSource;
+  stdout: string;
+  failed: boolean;
 }
 
 function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}...`;
-}
-
-interface SourceIndex {
-  source: ApiSource;
-  names: string[];
 }
 
 export default function (pi: ExtensionAPI) {
@@ -78,28 +52,33 @@ export default function (pi: ExtensionAPI) {
     name: "inspect_api",
     label: "Inspect API",
     description:
-      "Read the exact type names and C# source that a mod codes against, across every assembly the repository declares: the game (sts2.dll) and its standard framework (BaseLib.dll). Action search lists type names containing the query and tags each hit with the assembly it came from, attaching the assembly's own documentation summary when one exists. Action source decompiles one type in full, including private members and signatures. Use it before writing code that touches a game or BaseLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It only reads files and never loads or runs an assembly.",
-    promptSnippet: "Look up exact type names across the game and BaseLib before writing mod code",
+      "Read the exact type and member names and the C# behind them, across every assembly the repository declares: the game (sts2.dll) and its standard framework (BaseLib.dll). Actions: search finds types and members whose name contains the query, members lists one type's base chain and full member signatures, source decompiles one type (or one member) to C#. Results are tagged with the assembly they came from. Use it before writing code that touches a game or BaseLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It reads the assemblies on disk and never loads or runs the game.",
+    promptSnippet: "Look up exact type and member names across the game and BaseLib before writing mod code",
     promptGuidelines: [
-      "Call inspect_api before you write code that touches a game or BaseLib type. Do not guess type names; the two assemblies carry different halves of what a card needs.",
-      "Use action=search with a short substring of the type name, then action=source with the exact name that search returned. Search matches type names only, because the assemblies are the only complete source.",
-      "A type with no summary line is still real. The documentation files are partial: sts2.xml covers 15561 of 19635 members and BaseLib.xml omits CustomCardModel. Never read a missing summary as a missing type.",
-      "If a hit is tagged baselib, the mod must reference BaseLib and the manifest must declare it in dependencies. Inheriting a BaseLib type also requires sts2.dll, because BaseLib's types derive from the game's types.",
+      "Call inspect_api before you write code that touches a game or BaseLib type. Do not guess names; the two assemblies carry different halves of what a card needs.",
+      "Use action=search with a short substring. It matches both type names and member names, so searching for a method such as PortraitPath works and tells you which type owns it.",
+      "Use action=members to see a type's base chain. A BaseLib type derives from a game type, so a hit tagged baselib almost always means sts2.dll is needed too; members shows this directly.",
+      "A hit tagged baselib also means the mod must reference BaseLib and declare it in the manifest dependencies.",
       "When you learn something this way, write the fact and the query you used into docs/, so the next session does not repeat it.",
     ],
     parameters: Type.Object({
       action: Type.String({
-        description: 'One of "search" or "source".',
+        description: 'One of "search", "members", or "source".',
       }),
       query: Type.Optional(
         Type.String({
-          description: 'For action=search: a substring of a type name, for example "CustomCard" or "CardModel".',
+          description: 'For action=search: a substring of a type or member name, for example "CustomCard" or "PortraitPath".',
         }),
       ),
       typeName: Type.Optional(
         Type.String({
           description:
-            'For action=source: the full type name, for example "MegaCrit.Sts2.Core.Models.CardModel" or "BaseLib.Abstracts.CustomCardModel".',
+            'For action=members or action=source: the full type name, for example "MegaCrit.Sts2.Core.Models.CardModel" or "BaseLib.Abstracts.CustomCardModel".',
+        }),
+      ),
+      member: Type.Optional(
+        Type.String({
+          description: "For action=source: narrow the output to one member, for example a method name.",
         }),
       ),
       assembly: Type.Optional(
@@ -108,11 +87,72 @@ export default function (pi: ExtensionAPI) {
             'Restrict to one label: "game" or "baselib". Default "all", which is what you normally want because a card needs names from both.',
         }),
       ),
-      limit: Type.Optional(Type.Number({ description: "Maximum results for search. Default 30, maximum 200." })),
+      limit: Type.Optional(Type.Number({ description: "Maximum output lines. Default 400." })),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const repoRoot = ctx.cwd;
+      const action = ACTION_MAP[params.action ?? ""];
+      if (!action) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `FAIL: unknown action ${JSON.stringify(params.action)}.\nNEXT: use one of search, members, or source.`,
+            },
+          ],
+          details: { ok: false, reason: "BAD_ACTION" },
+        };
+      }
+
+      const target = (params.action === "search" ? params.query : params.typeName)?.trim() ?? "";
+      if (!target) {
+        const need = params.action === "search" ? "query" : "typeName";
+        return {
+          content: [
+            {
+              type: "text",
+              text: `FAIL: action=${params.action} needs ${need}.\nNEXT: ${
+                params.action === "search"
+                  ? "pass a short substring, for example \"CustomCard\"."
+                  : "run action=search first to get the exact type name."
+              }`,
+            },
+          ],
+          details: { ok: false, reason: "NO_TARGET" },
+        };
+      }
+
+      // The probe has to exist: bin/ is gitignored, so a fresh clone starts without it.
+      const probeDll = join(repoRoot, PROBE_DIR, PROBE_DLL);
+      if (!existsSync(probeDll)) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `FAIL: the API probe is not built yet (${join(PROBE_DIR, PROBE_DLL)}).\nNEXT: run check_runtime; it builds tools/api-probe. The build needs no network because the decompiler is vendored.`,
+            },
+          ],
+          details: { ok: false, reason: "PROBE_NOT_BUILT" },
+        };
+      }
+
       const state = readState(repoRoot);
+      const dotnet = typeof (state.runtime?.dotnet ?? state.dotnet) === "string"
+        ? ((state.runtime?.dotnet ?? state.dotnet) as string)
+        : "";
+      if (!dotnet) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: "FAIL: the .NET SDK path is not recorded, so the probe cannot be started.\nNEXT: run check_runtime first.",
+            },
+          ],
+          details: { ok: false, reason: "NO_DOTNET" },
+        };
+      }
+
+      // Which assemblies to search, from the contract file only.
       const cfg = readModRepoConfig(repoRoot);
       const gameDir = typeof state.gameDir === "string" ? state.gameDir : null;
       const managed =
@@ -121,19 +161,14 @@ export default function (pi: ExtensionAPI) {
           : gameDir
             ? managedDirFor(gameDir, cfg)
             : null;
-
-      // Which assemblies to search, from the contract file only.
       let references: string[] = [];
-      let packages: { id: string; label: string; assembly: string; docs?: string }[] = [];
+      let packages: { id: string; label: string; assembly: string }[] = [];
       try {
-        const raw = readGameConfig(repoRoot) as {
-          assemblies?: string[];
-          packages?: { id: string; label: string; assembly: string; docs?: string }[];
-        };
+        const raw = readGameConfig(repoRoot);
         references = raw.assemblies ?? [];
         packages = raw.packages ?? [];
       } catch {
-        /* fall through with empty lists; the note below explains it */
+        /* the notes below explain an empty result */
       }
 
       const { sources, notes } = resolveApiSources({ managedDir: managed, references, packages });
@@ -141,17 +176,12 @@ export default function (pi: ExtensionAPI) {
       const active = wanted === "all" ? sources : sources.filter((s) => s.label === wanted);
 
       if (!active.length) {
-        // Say which prerequisite is missing, not both: the two have different fixes.
         const gameMissing = !managed || !existsSync(managed);
-        const pkgMissing = packages
-          .filter((p) => !sources.some((s) => s.label === p.label))
-          .map((p) => p.id);
+        const pkgMissing = packages.filter((p) => !sources.some((s) => s.label === p.label)).map((p) => p.id);
         const next: string[] = [];
         if (gameMissing) next.push("run try_set_game_dir so the game's data directory is recorded");
         if (pkgMissing.length)
-          next.push(
-            `run dotnet restore in a mod that references ${pkgMissing.join(", ")} so the package is in the NuGet cache`,
-          );
+          next.push(`run dotnet restore in a mod that references ${pkgMissing.join(", ")} so the package is in the NuGet cache`);
         return {
           content: [
             {
@@ -163,202 +193,118 @@ export default function (pi: ExtensionAPI) {
               ].join("\n"),
             },
           ],
-          details: { ok: false, reason: "NO_SOURCE", sources: sources.map((s) => s.label) },
+          details: { ok: false, reason: "NO_SOURCE" },
         };
       }
-
-      // ilspycmd: the repo pins it in .config/dotnet-tools.json, otherwise use a global install.
-      const cached = state.runtime?.dotnet ?? state.dotnet;
-      const dotnet = typeof cached === "string" && cached ? cached : "";
-      const globalIlspy = dotnet ? join(dirname(dotnet), "tools", "ilspycmd") : "";
-      const localManifest = join(repoRoot, ".config", "dotnet-tools.json");
-      const useLocal = existsSync(localManifest) && Boolean(dotnet);
-      const ilspy = useLocal ? dotnet : globalIlspy;
-      const haveIlspy = Boolean(ilspy) && existsSync(ilspy);
-      const ilspyArgs = (rest: string[]) => (useLocal ? ["tool", "run", "ilspycmd", ...rest] : rest);
-      const ilspyEnv = dotnet
-        ? { ...process.env, DOTNET_ROOT: dirname(dotnet), PATH: `${dirname(dotnet)}:${process.env.PATH ?? ""}` }
-        : process.env;
-      const installHint = useLocal
-        ? 'run "dotnet tool restore" in the repository root (the version is pinned in .config/dotnet-tools.json)'
-        : `install it once with "${dotnet || "dotnet"} tool install -g ilspycmd"`;
 
       const describe = (s: ApiSource) =>
         s.version ? `${s.label} (${s.assembly} ${s.version})` : `${s.label} (${s.assembly})`;
 
-      // ---- source -------------------------------------------------------------
-      if (params.action === "source") {
-        const typeName = (params.typeName ?? "").trim();
-        if (!typeName) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "FAIL: action=source needs typeName.\nNEXT: run action=search with a substring of the name to get the exact spelling.",
-              },
-            ],
-            details: { ok: false, reason: "NO_TYPE_NAME" },
-          };
-        }
-        if (!haveIlspy) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: `FAIL: ilspycmd is not available, so source cannot be decompiled.\nNEXT: ${installHint}, then run source again.`,
-              },
-            ],
-            details: { ok: false, reason: "NO_ILSPY" },
-          };
-        }
-        const tried: string[] = [];
-        for (const s of active) {
-          try {
-            const r = await runAsync(ilspy, ilspyArgs(["-t", typeName, s.dllPath]), {
-              cwd: repoRoot,
-              env: ilspyEnv,
-              timeoutMs: 180_000,
-            });
-            const text = r.stdout.trim();
-            if (!text) {
-              tried.push(s.label);
-              continue;
-            }
-            return {
-              content: [{ type: "text", text: clip(text, 40_000) }],
-              details: { ok: true, action: "source", typeName, foundIn: describe(s) },
-            };
-          } catch {
-            tried.push(s.label);
-          }
-        }
-        return {
-          content: [
-            {
-              type: "text",
-              text: `FAIL: no assembly searched defines ${typeName} (tried ${tried.join(", ")}).\nNEXT: run action=search with a substring of the name to get the exact spelling.`,
-            },
-          ],
-          details: { ok: false, reason: "NOT_FOUND", typeName, tried },
-        };
-      }
-
-      // ---- search -------------------------------------------------------------
-      const query = (params.query ?? "").trim();
-      if (!query) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: 'FAIL: action=search needs query.\nNEXT: pass a short substring of a type name, for example "CustomCard".',
-            },
-          ],
-          details: { ok: false, reason: "NO_QUERY" },
-        };
-      }
-      const limit = Math.min(Math.max(params.limit ?? 30, 1), 200);
-      const q = query.toLowerCase();
-
-      // Type names come from the assembly when ilspycmd is available, which is complete.
-      // Without it, fall back to the doc file and say the list is partial.
-      let indexed: SourceIndex[] = [];
-      let degradedLabels: string[] = [];
-      if (haveIlspy) {
-        for (const s of active) {
-          try {
-            const r = await runAsync(ilspy, ilspyArgs(["-l", "c", s.dllPath]), {
-              cwd: repoRoot,
-              env: ilspyEnv,
-              timeoutMs: 180_000,
-            });
-            const names = r.stdout
-              .split("\n")
-              .map((l) => l.replace(/^(Class|Struct|Interface|Enum|Delegate)\s+/, "").trim())
-              .filter(Boolean);
-            if (names.length) indexed.push({ source: s, names });
-          } catch {
-            degradedLabels.push(s.label);
-          }
-        }
-      }
-      const doc = readDocIndex(active);
-      if (!indexed.length) {
-        degradedLabels = active.map((s) => s.label);
-        for (const s of active) {
-          const names = [...doc.byName.keys()].filter((k) => k.startsWith("T:")).map((k) => k.slice(2));
-          if (names.length) indexed.push({ source: s, names });
+      // One probe run per assembly, always with the game's data directory as the resolver
+      // root. That matters for correctness, not tidiness: api-probe builds a
+      // UniversalAssemblyResolver over --managed, so probing BaseLib with the NuGet folder as
+      // the root leaves sts2.dll unresolvable and its base chain comes back empty (the class
+      // base is dropped as TypeKind.Unknown). Pointing the resolver at the game directory and
+      // loading the package assembly by an absolute --dll keeps the chain intact -
+      // Path.Combine returns the absolute path unchanged.
+      const resolverRoot = managed && existsSync(managed) ? managed : null;
+      const runs: ProbeRun[] = [];
+      for (const s of active) {
+        const args = [
+          probeDll,
+          "--managed",
+          resolverRoot ?? s.root,
+          "--dll",
+          resolverRoot ? s.dllPath : `${s.assembly}.dll`,
+          "--action",
+          action,
+          "--target",
+          target,
+        ];
+        if (params.member) args.push("--member", params.member);
+        try {
+          const r = await runAsync(dotnet, args, {
+            cwd: repoRoot,
+            env: { ...process.env, DOTNET_ROOT: dotnet.replace(/\/dotnet(\.exe)?$/, "") },
+            timeoutMs: 180_000,
+          });
+          runs.push({ source: s, stdout: r.stdout.trim(), failed: false });
+        } catch (e) {
+          // api-probe exits 1 when the target is absent from that assembly, which is a
+          // normal outcome when searching two assemblies. Keep whatever it printed.
+          const err = e as { stdout?: string; stderr?: string; message?: string };
+          runs.push({
+            source: s,
+            stdout: (err.stdout ?? "").trim() || (err.stderr ?? "").trim() || (err.message ?? "").trim(),
+            failed: true,
+          });
         }
       }
 
-      interface Hit {
-        label: string;
-        name: string;
-      }
-      const hits: Hit[] = [];
-      for (const { source, names } of indexed) {
-        for (const n of names) {
-          // Drop compiler-generated helpers (<>c display classes, <Module>, and nested
-          // state machines such as CustomCardModel.<FinishMakeCalculatedVar>d__25).
-          const compilerGenerated = n.includes("<>") || n.split(".").some((seg) => seg.startsWith("<"));
-          if (!n.toLowerCase().includes(q) || compilerGenerated) continue;
-          hits.push({ label: source.label, name: n });
-        }
-      }
-
+      // A real hit always begins with a "## <file>" header. A miss prints either
+      // "# search: 0 match(es) ... legal empty result" or "# ERROR: no result ...".
+      // Searching several assemblies makes a miss the expected outcome for most of them,
+      // so only blocks with a header are rendered; otherwise every cross-assembly lookup
+      // would print error text for the assemblies that legitimately do not define the type.
+      const hits = runs.filter((r) => /^## /m.test(r.stdout));
       if (!hits.length) {
-        const total = indexed.reduce((a, b) => a + b.names.length, 0);
+        // api-probe computes a nearest-name suggestion on a miss. Keep it: it is the most
+        // useful thing to hand back when the spelling is slightly off.
+        const suggestions = runs
+          .flatMap((r) => r.stdout.split("\n"))
+          .filter((l) => l.startsWith("#   did you mean:"))
+          .map((l) => l.replace("#   did you mean:", "").trim())
+          .slice(0, 2);
         return {
           content: [
             {
               type: "text",
-              text: `FAIL: no type name matches "${query}" (searched ${indexed.length} assembly(ies), ${total} names).\nNEXT: try a shorter substring or a different capitalisation. Search matches type names, not member names.`,
+              text: [
+                `FAIL: nothing matched "${target}" in ${active.map(describe).join(", ")}.`,
+                ...suggestions.map((s) => `Did you mean: ${s}`),
+                ...notes,
+                "NEXT: names are matched as a substring. Try a shorter one, or check the spelling.",
+              ].join("\n"),
             },
           ],
-          details: { ok: false, reason: "NO_MATCH", query },
+          details: { ok: false, reason: "NO_MATCH", target },
         };
       }
 
-      // Game first, then packages; then shorter names, which are usually what was meant.
-      const rank = (h: Hit) => (h.label === "game" ? 0 : 1);
-      hits.sort((a, b) => rank(a) - rank(b) || a.name.length - b.name.length || a.name.localeCompare(b.name));
-      const seen = new Set<string>();
-      const shown: Hit[] = [];
-      for (const h of hits) {
-        const key = `${h.label}/${h.name}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
-        shown.push(h);
-        if (shown.length >= limit) break;
+      // Label each block so the reader can tell the game from the framework.
+      const blocks: string[] = [];
+      for (const r of hits) {
+        const body = r.stdout
+          .split("\n")
+          .map((l) => l.trimEnd())
+          .filter((l, i, arr) => !(l === "" && arr[i - 1] === ""))
+          .join("\n");
+        blocks.push(`[${describe(r.source)}]\n${body}`);
       }
+      const text = blocks.join("\n\n");
+      const limit = Math.min(Math.max(params.limit ?? 400, 20), 2000);
+      const lines = text.split("\n");
+      const trimmed = lines.length <= limit ? text : `${lines.slice(0, limit).join("\n")}\n... (${lines.length - limit} more lines truncated)`;
 
-      const lines: string[] = [];
-      for (const h of shown) {
-        const summary = doc.byName.get(`T:${h.name}`);
-        lines.push(`[${h.label}] ${h.name}${summary ? `\n    ${clip(summary, 180)}` : ""}`);
-      }
-      if (hits.length > shown.length) lines.push(`... ${hits.length - shown.length} more matches (raise limit or narrow the query)`);
-      lines.push("");
-      lines.push(`Searched: ${indexed.map((i) => describe(i.source)).join(", ")}`);
-      for (const n of notes) lines.push(n);
-      if (degradedLabels.length) {
-        lines.push(
-          `WARNING: ilspycmd is not available for ${degradedLabels.join(", ")}, so those lists came from the documentation files and are incomplete.`,
-        );
-        lines.push(`NEXT: ${installHint} to search those assemblies fully.`);
-      } else {
-        lines.push("NEXT: run action=source with one of the names above to read the type.");
+      const footer: string[] = [];
+      for (const n of notes) footer.push(n);
+      if (params.action === "search") {
+        footer.push("NEXT: action=members shows a type's base chain; action=source reads its C#.");
       }
 
       return {
-        content: [{ type: "text", text: lines.join("\n") }],
+        content: [
+          {
+            type: "text",
+            text: [trimmed, ...(footer.length ? ["", ...footer] : [])].join("\n"),
+          },
+        ],
         details: {
           ok: true,
-          action: "search",
-          query,
-          matches: hits.length,
-          shown: shown.length,
-          searched: indexed.map((i) => i.source.label),
-          degraded: degradedLabels,
+          action: params.action,
+          target,
+          searched: active.map((s) => describe(s)),
+          ran: runs.map((r) => r.source.label),
         },
       };
     },
