@@ -1,6 +1,7 @@
-# 坑（每条都会静默失效，不报错）
+# 坑
 
-这个游戏最贵的学习成本在这里：出错的默认表现不是崩溃，而是**「看起来装了，其实没加载」**。
+这个游戏最贵的学习成本在这里：出错的默认表现**多数不是崩溃**，而是「看起来装了，其实没加载」。
+少数几条会直接崩或起不来，但**报错的位置离原因很远**（第 14 条最典型）。
 下面每条都按「症状、原因、怎么确认」三段写。
 
 ## 1. mod 装了但游戏里没有
@@ -148,3 +149,32 @@ open "steam://rungameid/2868840//-nomods"
 
 - mods 根在 **`.app` 包内**（`Contents/MacOS/mods/`），写进去会改动 bundle 内容。Steam 校验完整性时可能被清掉。
 - 游戏有 arm64 与 x86_64 两份数据目录，编译引用的 `sts2.dll` 要与当前进程架构一致（`managedDirFor` 会自动兜底）。
+
+## 13. `inspect_api` 搜不到，不等于没人用
+
+**症状**：`action=search` 搜 `GetCustomAttribute` 返回 `0 match(es)`，据此判定「这个特性没人读」。
+
+**原因**：`search` 只索引**被搜 DLL 自己声明的**类型与成员。`GetCustomAttribute<T>()` 定义在 `System.Reflection`，调用它的代码在 BaseLib 里只是一个外部引用 —— 永远搜不到。
+
+**已踩**：靠这个结论删掉了 BaseLib 强制的 `[Pool]`，结果游戏起不来（第 14 条）。
+
+**正确做法**：要找名字用 `action=search`；要判断**有没有人用**，用 `action=decompile` 读那个类，或用 `action=il` 看调用点。`search` 的 0 命中只能证明「没声明」。
+
+## 14. `[Pool]` 缺失：游戏起不来，但报错不在 mod 加载阶段
+
+**症状**：给 `CustomCardModel` / `CustomRelicModel` 的派生类漏了 `[Pool]`，游戏启动停在错误对话框。
+
+**日志**（`~/Library/Application Support/SlayTheSpire2/logs/godot.log`）：
+
+```
+[ERROR] Encountered error on game startup! Attempting to show error dialog
+[ERROR] System.Exception: Model ExampleCard.FocusedStrike must be marked with a PoolAttribute to determine which pool to add it to.
+   at BaseLib.Patches.Content.CustomContentDictionary.AddModel(Type modelType)
+   at BaseLib.Abstracts.CustomCardModel..ctor(...)
+   at MegaCrit.Sts2.Core.Models.ModelDb.Init_Patch4()
+   at MegaCrit.Sts2.Core.Nodes.NGame.GameStartup()
+```
+
+**最容易看错的地方**：这条崩溃的日志里，`--- RUNNING MODDED! --- Loaded 3 mods` **照样出现过**，而且出现在报错**之前**。所以「mods 都加载了」不能作为「没问题」的证据 —— 崩溃点在 `ModelDb.Init`，比 mod 加载更晚。排障先搜 `[ERROR]` 那段堆栈。
+
+**修法**：给类加 `[Pool(typeof(...))]`。加了之后**不得**再手写 `ModHelper.AddModelToPool`（`docs/game.md` §7）。

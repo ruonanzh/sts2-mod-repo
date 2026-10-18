@@ -23,6 +23,16 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 const root = resolve(import.meta.dirname, "..");
 /** 不查的目录：工作区（app 托管，内容不可控）、构建产物、依赖 */
 const SKIP_DIRS = new Set([".git", "node_modules", "your_mods", "bin", "obj"]);
+/**
+ * 逐字居留的上游文档，**不查**。
+ *
+ * `reference/base-lib-wiki/**` 是从 Alchyr/BaseLib-Wiki 原样抓下来的（见那边的 `SOURCE.md`）。
+ * 上游用 Jekyll 的 `{% link docs/... %}` 语法，本脚本按 markdown 相对路径解析，会全部判成坏链 ——
+ * 而这些文件**不许改**（改了就没法跟上游 diff），所以只能整个目录跳过。
+ * 索引由我们写的 `reference/base-lib-wiki/INDEX.md` 提供，那一个文件照常检查。
+ */
+const SKIP_PATHS = ["reference/base-lib-wiki"];
+const isSkippedPath = (rel) => SKIP_PATHS.some((p) => rel === p || rel.startsWith(`${p}/`));
 /** 反引号路径里认得的仓库顶层目录 */
 const REPO_TOP_DIRS = ["docs", "scripts", "libs", "reference", "editors", "tools", ".pi", "templates"];
 /** 行内写明是别的仓库时，`docs/…` 这类路径按那边的仓库算，本仓不查 */
@@ -36,7 +46,11 @@ const files = [];
       if (SKIP_DIRS.has(e.name)) continue;
       walk(join(dir, e.name));
     } else if (e.name.endsWith(".md")) {
-      files.push(join(dir, e.name));
+      const abs = join(dir, e.name);
+      // 上游快照整目录跳过，只留我们自己写的 INDEX.md
+      if (isSkippedPath(relative(root, abs)) && !abs.endsWith("base-lib-wiki/INDEX.md"))
+        continue;
+      files.push(abs);
     }
   }
 })(root);

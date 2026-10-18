@@ -125,9 +125,21 @@ if (ResourceLoader.Exists(text)) yield return text;
 ## 7. 内容扩展（BaseLib）
 
 - 继承 `Custom*Model`（`CustomCardModel` / `CustomRelicModel` / `CustomPotionModel` / `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` …），构造函数会自动 `CustomContentDictionary.AddModel(GetType())`。
-- 池归属用 `[Pool(typeof(IroncladCardPool))]`。
-- 版本对应：BaseLib 3.3.0+ 配游戏 0.107；本机装的是 0.107.1。
-- 本地化：`localization/<lang>/{cards,relics,powers,characters,ancients,card_keywords,static_hover_tips}.json`，键 `MODID-MODEL_ID.title` / `.description`。
+- **池归属用 `[Pool(typeof(IroncladCardPool))]`，这条是必需的。** 反编译 `BaseLib.Patches.Content.CustomContentDictionary.AddModel`：
+
+  ```csharp
+  PoolAttribute poolAttribute = modelType.GetCustomAttribute<PoolAttribute>()
+      ?? throw new Exception("Model " + modelType.FullName + " must be marked with a PoolAttribute ...");
+  if (!IsValidPool(modelType, poolAttribute.PoolType)) throw ...;
+  ModHelper.AddModelToPool(poolAttribute.PoolType, modelType);
+  ```
+
+  没有它，类在**构造时**就抛。异常传到 `ModelDb.Init`，再传到 `NGame.GameStartup`，结果是**游戏起不来**（`traps.md` 第 14 条）。`[Pool]` **可继承**：多张卡可以共用一个带特性的基类。加了 `[Pool]` 之后**不得**再手写 `ModHelper.AddModelToPool`。BaseLib 已经调过，重复加会让同一张卡进池两次。
+- 不继承 `Custom*Model`、只用 `ICustomModel` 标记时，必须在默认构造函数里调 `CustomContentDictionary.AddModel(GetType())`，`[Pool]` 才会生效。
+- 本地化：`localization/<lang>/{cards,relics,powers,characters,ancients,card_keywords,static_hover_tips}.json`，键 `MODID-MODEL_ID.title` / `.description`。DLL-only 的 mod 带不了这份 json（见上文的 `res://` 限制），改在 C# 里实现 `ILocalizationProvider`。
+- **缺本地化只打一条 error，不崩**（上游 `Features.md` 明写）。所以「卡没有名字」和「卡加载失败」是两件事，别混。
+- **版本号不写在这里。** 装的是哪一版看 `vendor/baselib/BaseLib.json` 的 `version` 字段；本页写过一次 `3.3.0+`，已经过期。
+- **官方 wiki 的逐字快照在 `reference/base-lib-wiki/`**，先读那份 `INDEX.md` 找页，再用 `inspect_api` 查真名。
 
 ## 8. 用 fetch 查名字的边界
 
