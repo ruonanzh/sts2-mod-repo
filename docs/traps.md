@@ -113,9 +113,19 @@ strings -a <id>.dll | grep ModInitializerAttribute
 
 ## 9. 同一个 mod 同时存在于 Workshop 与本地
 
-**症状**：日志 `DisabledDuplicate`。
+**症状**：日志 `Mod with ID <id> is loaded both via Steam and local mods directory. Disabling the Steam workshop version.`，状态是 `DisabledDuplicate`。
 
-**原因**：`RemoveDisabledMods` 故意这么做——**本地优先**，方便 modder 开发。不是 bug。
+**原因**（反编译 `ModManager.RemoveDisabledMods`）：收集所有 `ModSource.ModsDirectory` 的 id，然后把 id 相同的 `SteamWorkshop` 那条关掉。注释写明动机是「方便 modder 开发」。不是 bug。
+
+**真正的风险不是冲突，是版本落后**：本地那份会**盖掉** Workshop 那份。如果玩家订阅的版本已经更新，而本地还留着一份旧的手工拷贝，游戏会静默用旧的，升级永远到不了。
+
+**所以规则是**：
+
+- **玩家机器上，依赖类 mod（BaseLib 这类）只能从 Workshop 订阅**，不得手工拷贝。
+- 本地拷贝是开发者的便利（改一版、立刻试），开发完要清掉。
+- 自己的 mod 更是如此：本地留着旧版，玩家订阅的新版就被关了。
+
+**不得指望有报错**：这条只打一行 WARN，游戏照常启动，看起来一切正常。
 
 ## 10. 带启动参数直接跑二进制
 
