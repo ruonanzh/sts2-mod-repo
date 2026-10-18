@@ -159,6 +159,32 @@ files next to the assembly, because the assembly reads them from its own directo
 
 This is a stopgap, not a design. The real fix is a `<id>.pck`, and the art direction is deferred.
 
+### 6.0b Why a mod card shows as locked in the card library
+
+The card library decides in `NCardLibraryGrid.RefreshVisibility` with two sets:
+
+```csharp
+_seenCards     = SaveManager.Instance.Progress.DiscoveredCards.ToHashSet();
+_unlockedCards = ModelDb.AllCardPools.Select(p => p.GetUnlockedCards(unlockState, CardMultiplayerConstraint.None))...
+```
+
+Two gates, and they are different. **Unlocked** comes from the epoch filter in each pool, and a mod
+card passes it because it belongs to no epoch. **Seen** comes from `DiscoveredCards` in the progress
+save, and the game only adds an id there when the player meets that card in a run. So a brand new
+mod card renders as locked even though nothing forbids it.
+
+BaseLib has a patch for this, `CustomCardPoolMarkAsSeenPatch`, but it only marks cards from a
+`CustomCardPoolModel` with `SeenByDefault`. A card added to the vanilla `IroncladCardPool` is not
+covered. Call `SaveManager.Instance.Progress.MarkCardAsSeen(card.Id)` yourself, in a Harmony prefix
+on `RefreshVisibility` so it runs before the grid reads `Progress`. Measured on 2026-10-18:
+
+```
+[probe] DiscoveredCards before=False added=True after=True (count=1)
+```
+
+Do not use `SaveManager.Instance.MarkCardAsSeen(card)`. It also requires `card.Owner` to be the local
+player, and a canonical model from a pool does not have one.
+
 ### 6.1 Localization: `res://` accepts only the mod's own PCK
 
 This is the decompiled `ModManager.GetModdedLocTables`:
