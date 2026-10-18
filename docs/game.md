@@ -242,12 +242,12 @@ Two details make the in-code route silent when it is wrong:
   `CustomPowerModel` / `CustomEventModel` / `CustomMonsterModel` / `CustomCharacterModel` / the other
   model classes). The constructor automatically calls `CustomContentDictionary.AddModel(GetType())`.
 - **A card pool and a starting deck are two different lists.** The pool decides whether a card can
-  appear as a reward (`IroncladCardPool` holds 87 fixed cards). The starting deck is the 10 hard-coded
+  appear as a reward (`IroncladCardPool` holds 87 built-in cards). The starting deck is the 10 hard-coded
   cards in `Ironclad.StartingDeck`. A card in the pool is not in the opening hand (`traps.md` 15).
 - **Use the `CardAttack` overload whose second parameter is a `CardPlay`.** The overloads that take a
   `Creature` target instead, and the ones that take a `decimal`, carry
   `[Obsolete("Use the variant that has a CardPlay as the second parameter instead ...")]`
-  (`CommonActions.cs:52,58,128`). The wiki's card example shows the obsolete form, so do not copy it.
+  (`CommonActions.cs:52,58,128`). The wiki's card example demonstrates the obsolete form, so do not copy it.
 - **Pool membership uses `[Pool(typeof(IroncladCardPool))]`, and this attribute is mandatory.**
   This is the decompiled `BaseLib.Patches.Content.CustomContentDictionary.AddModel`:
 
