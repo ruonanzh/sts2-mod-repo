@@ -23,6 +23,7 @@ description: 第一次在本工作区工作时用，例如工具说路径没记�
 
 1. `check_runtime`（无参）。要求 .NET 9 SDK。返回 FAIL 时跑 `install_runtime` 拿安装指引，装完再跑一次 `check_runtime`。
    为什么是 9：游戏用 `net9.0`，SDK 8 会在编译时报 `NETSDK1045`。出处：`mod-repo.json` 的 `compile.sdkMajor`，以及本机实测。
+   同一步还会跑 `dotnet tool restore`，把仓库锁定的反编译器装好。**这个反编译器不是 SDK 自带的**：它是第三方包（ILSpy Team），`dotnet` 只提供安装机制。所以**第一次需要联网**（约 11 MB），之后走本机 NuGet 缓存。
 2. `try_set_game_dir`（无参）。它做三件事：发现游戏目录、派生 mod 目录与数据目录、写进 `.gamer-agent.local.json`。
 3. `check_game_paths`（无参）。只读校验上一步记下的路径。全部 PASS 才算就位。
 4. 只在要编译时：确认 `validate_mod` 能跑（见 mod-creator）。
@@ -46,3 +47,4 @@ macOS 上 modInstallDir 形如 `.../SlayTheSpire2.app/Contents/MacOS/mods`。它
 | `check_game_paths` 报 modInstallDir 不存在 | mods 目录需要时创建，游戏不会建 | 正常。`install_mod` 会创建它 |
 | `check_game_paths` 报 Workshop 目录没记录 | 玩家没订阅任何 mod | 正常，可选参考路径。不影响做 mod |
 | 路径 PASS 但游戏里看不到 mod | 加载总开关是关闭的 | 见 mod-installer 的验收段 |
+| `Local tools restored` 这句话没出现 | 仓库里没有 `.config/dotnet-tools.json`，或 restore 失败 | restore 失败时会写 WARN 并说明原因。没有网时它会失败，此时 `inspect_game_api` 只能读文档，**清单不完整** |
