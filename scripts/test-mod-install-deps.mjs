@@ -12,13 +12,16 @@
  *
  * 用法：node scripts/test-mod-install-deps.mjs
  */
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const tmp = mkdtempSync(join(tmpdir(), "sts2-dep-check-"));
+// 临时仓库必须**在仓库根内部**：复制过去的扩展要 import "typebox"，
+// node 靠往上找 node_modules 解析它。用临时目录外的路径就得造符号链接，
+// 而 Windows 上创建符号链接需要开发者模式或管理员权限 —— 那会让这条 pre-commit
+// 在 Windows 上直接失败（本仓要求 mac 和 windows 都能用）。
+const tmp = mkdtempSync(join(repoRoot, ".dep-check-"));
 
 /** node 的 ESM 解析要求带扩展名，仓库源码按 bundler 风格写，所以复制时补 .ts */
 function copyWithTsExtensions(from, to) {
@@ -69,7 +72,6 @@ function check(name, condition, detail) {
 // ── 临时仓库：只放 install_mod 真正会读的东西 ────────────────────────────────
 const caseRoot = tmp;
 copyWithTsExtensions(join(repoRoot, ".pi"), join(caseRoot, ".pi"));
-symlinkSync(join(repoRoot, "node_modules"), join(caseRoot, "node_modules"));
 
 const vendorDir = join(caseRoot, "vendor", "baselib");
 mkdirSync(vendorDir, { recursive: true });
