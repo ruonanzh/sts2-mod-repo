@@ -1,5 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
+import { runAsync } from "../lib/proc";
 import { probeDotnet } from "../lib/dotnet";
 import { readGameConfig, readState, writeState } from "../lib/game-paths";
 
@@ -21,7 +24,7 @@ export default function (pi: ExtensionAPI) {
     name: "check_runtime",
     label: "Check Runtime",
     description:
-      "Checks that the .NET SDK meets the minimum major version declared in mod-repo.json (compile.sdkMajor; Slay the Spire 2 needs 9 because the game targets net9.0). It records the resolved dotnet path in .gamer-agent.local.json. It does not locate the game, and it does not report whether the game's mod loading switch is on; install_mod does that. Game and mod paths belong to check_game_paths, try_set_game_dir, and set_game_dir.",
+      "Checks that the .NET SDK meets the minimum major version declared in mod-repo.json (compile.sdkMajor; Slay the Spire 2 needs 9 because the game targets net9.0). When the repo pins local tools in .config/dotnet-tools.json, it also runs dotnet tool restore so those tools are usable; that writes into the user-level NuGet cache, not the repository. It records the resolved dotnet path in .gamer-agent.local.json. It does not locate the game, and it does not report whether the game's mod loading switch is on; install_mod does that. Game and mod paths belong to check_game_paths, try_set_game_dir, and set_game_dir.",
     promptSnippet: "Check the .NET SDK when compilation needs it or the player asks about setup",
     promptGuidelines: [
       "Use check_runtime when the SDK is needed for compilation, or when the player asks whether the environment is ready.",
@@ -54,6 +57,24 @@ export default function (pi: ExtensionAPI) {
           details: { ...readState(cwd), ok: false },
         };
       }
+      // 仓库用 .config/dotnet-tools.json 锁定本地工具（ilspycmd），二进制装在用户级 NuGet
+      // 缓存里而**不进 git**。这里顺手 restore：已 restore 过时它是一条秒回的幂等操作。
+      // 装工具失败不降级 SDK 的结论，只补一条 WARN —— 编译不依赖它。
+      let toolsNote = "";
+      const manifest = join(cwd, ".config", "dotnet-tools.json");
+      if (existsSync(manifest)) {
+        try {
+          await runAsync(dotnet.path as string, ["tool", "restore"], {
+            cwd,
+            env: { ...process.env, DOTNET_ROOT: dotnet.path ? join(dotnet.path, "..") : undefined } as NodeJS.ProcessEnv,
+            timeoutMs: 180_000,
+          });
+          toolsNote = " Local tools restored (ilspycmd).";
+        } catch (e) {
+          toolsNote = ` WARN: dotnet tool restore failed (${(e as Error).message.split("\n")[0]}); inspect_game_api will fall back to the documentation file.`;
+        }
+      }
+
       // 只写 runtime 这一段；路径由 try_set_game_dir / set_game_dir 负责（同一个原子读改写 helper）
       writeState(cwd, {
         runtime: { dotnet: dotnet.path, dotnetVersion: dotnet.version },
@@ -62,7 +83,7 @@ export default function (pi: ExtensionAPI) {
         content: [
           {
             type: "text",
-            text: `PASS: dotnet ${dotnet.version} (${dotnet.path}) - .NET SDK is ready.`,
+            text: `PASS: dotnet ${dotnet.version} (${dotnet.path}) - .NET SDK is ready.${toolsNote}`,
           },
         ],
         details: { ...readState(cwd), ok: true },

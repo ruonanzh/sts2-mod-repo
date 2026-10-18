@@ -128,7 +128,15 @@ export default function (pi: ExtensionAPI) {
       // ilspycmd is a dotnet global tool; it lives beside the SDK recorded by check_runtime.
       const cached = state.runtime?.dotnet ?? state.dotnet;
       const dotnet = typeof cached === "string" && cached ? cached : "";
-      const ilspy = dotnet ? join(dirname(dotnet), "tools", "ilspycmd") : "";
+      // Two ways the decompiler can be present, in order of preference:
+      //   1. the repo's pinned local tool (.config/dotnet-tools.json), run through "dotnet tool run"
+      //   2. a global tool installed by the player
+      // The local manifest keeps the version reproducible and adds no binary to git.
+      const globalIlspy = dotnet ? join(dirname(dotnet), "tools", "ilspycmd") : "";
+      const localManifest = join(repoRoot, ".config", "dotnet-tools.json");
+      const useLocal = existsSync(localManifest) && Boolean(dotnet);
+      const ilspy = useLocal ? (dotnet as string) : globalIlspy;
+      const ilspyArgs = (rest: string[]) => (useLocal ? ["tool", "run", "ilspycmd", ...rest] : rest);
       const haveIlspy = Boolean(ilspy) && existsSync(ilspy);
       const ilspyEnv = dotnet
         ? {
@@ -137,7 +145,9 @@ export default function (pi: ExtensionAPI) {
             PATH: `${dirname(dotnet)}:${process.env.PATH ?? ""}`,
           }
         : process.env;
-      const installHint = `install it once with "${dotnet || "dotnet"} tool install -g ilspycmd"`;
+      const installHint = useLocal
+        ? `run "dotnet tool restore" in the repository root (the version is pinned in .config/dotnet-tools.json)`
+        : `install it once with "${dotnet || "dotnet"} tool install -g ilspycmd"`;
 
       // ---- source -------------------------------------------------------------
       if (params.action === "source") {
@@ -165,7 +175,11 @@ export default function (pi: ExtensionAPI) {
           };
         }
         try {
-          const r = await runAsync(ilspy, ["-t", typeName, dll], { env: ilspyEnv, timeoutMs: 180_000 });
+          const r = await runAsync(ilspy, ilspyArgs(["-t", typeName, dll]), {
+            cwd: repoRoot,
+            env: ilspyEnv,
+            timeoutMs: 180_000,
+          });
           const text = r.stdout.trim();
           if (!text) {
             return {
@@ -217,7 +231,11 @@ export default function (pi: ExtensionAPI) {
       let source = "the assembly type list";
       if (haveIlspy) {
         try {
-          const r = await runAsync(ilspy, ["-l", "c", dll], { env: ilspyEnv, timeoutMs: 180_000 });
+          const r = await runAsync(ilspy, ilspyArgs(["-l", "c", dll]), {
+            cwd: repoRoot,
+            env: ilspyEnv,
+            timeoutMs: 180_000,
+          });
           // Lines look like: "Class MegaCrit.Sts2.Core.Models.CardModel"
           names = r.stdout
             .split("\n")
