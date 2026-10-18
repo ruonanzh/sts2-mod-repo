@@ -1,0 +1,12 @@
+{
+  "id": "TemplateMod",
+  "name": "Template Mod",
+  "author": "you",
+  "description": "Starting point. Copy this folder, then change the assembly name in TemplateMod.csproj, the namespace in Entry.cs, and the id here. All three must match.",
+  "version": "0.0.1",
+  "has_pck": false,
+  "has_dll": true,
+  "min_game_version": "0.107.1",
+  "dependencies": [],
+  "affects_gameplay": false
+}

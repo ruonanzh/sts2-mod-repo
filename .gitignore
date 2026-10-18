@@ -1,0 +1,8 @@
+bin/
+obj/
+*.user
+.DS_Store
+# 本地状态（游戏目录等），不入库
+.gamer-agent.local.json
+node_modules/
+.pi-mod.json

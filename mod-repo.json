@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "modType": "godot-csharp",
+
+  "game": {
+    "name": "Slay the Spire 2",
+    "steamAppId": "2868840",
+    "platforms": ["mac", "windows"],
+    "installDirHint": {
+      "mac": "~/Library/Application Support/Steam/steamapps/common/Slay the Spire 2",
+      "windows": "C:/Program Files (x86)/Steam/steamapps/common/Slay the Spire 2"
+    }
+  },
+
+  "loader": "godot-csharp-modmanager",
+  "sentinel": "sts2.dll",
+
+  "entry": {
+    "manifestFile": "<id>.json",
+    "classNameTemplate": "<name>.Entry",
+    "initializerAttribute": "MegaCrit.Sts2.Core.Modding.ModInitializerAttribute"
+  },
+
+  "compile": {
+    "sdk": "dotnet",
+    "sdkMajor": 9,
+    "targetFramework": "net9.0",
+    "managedDir": {
+      "mac": "SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64",
+      "windows": "data_sts2_windows_x86_64"
+    },
+    "references": ["sts2.dll", "0Harmony.dll"],
+    "pck": false
+  },
+
+  "modInstall": {
+    "relativeTo": "gameDir",
+    "path": {
+      "mac": "SlayTheSpire2.app/Contents/MacOS/mods",
+      "windows": "mods"
+    }
+  },
+
+  "artifacts": {
+    "manifest": "<id>.json",
+    "dll": "<id>.dll",
+    "pck": "<id>.pck"
+  },
+
+  "workshop": {
+    "supported": true,
+    "uploader": "megacrit/sts2-mod-uploader"
+  }
+}

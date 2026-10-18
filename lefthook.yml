@@ -1,0 +1,14 @@
+# 骨架仓的 pre-commit：只做「与游戏无关」的机器检查。
+# 需要本机装了 lefthook（brew install lefthook，然后 lefthook install）。
+# 没装也能手跑：node scripts/check-doc-refs.mjs / node scripts/check-prompt-standard-zh.mjs
+pre-commit:
+  parallel: true
+  commands:
+    doc-refs:
+      # 文档里的链接与反引号路径必须真的存在。踩过：SKILL 里写错的相对路径、指向别的仓的文件名。
+      run: node scripts/check-doc-refs.mjs
+    prompt-standard-zh:
+      # 中文提示词规范里能机器判的三条（情态词 / 箭头 / 术语）。规则文本随仓放在 docs/prompt-standard.md。
+      run: node scripts/check-prompt-standard-zh.mjs
+    # 该游戏若要再加检查（例如探针参数与工具面对齐、接口台账），在这里追加一条，
+    # 并把对应脚本放进 scripts/；不要在骨架里预留某游戏专用的检查。

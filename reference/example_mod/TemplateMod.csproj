@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <GenerateDependencyFile>false</GenerateDependencyFile>
+
+    <!-- 三处必须一致：这里、Entry.cs 的命名空间、<name>.json 的 id。
+         加载器按 <id>.dll 找程序集，名字不一致会静默不加载。 -->
+    <AssemblyName>TemplateMod</AssemblyName>
+    <RootNamespace>TemplateMod</RootNamespace>
+
+    <!-- 游戏目录与数据目录：由 validate_mod 传入，或自己 export（见 docs/game.md） -->
+    <GameDir Condition="'$(GAME_DIR)' != ''">$(GAME_DIR)</GameDir>
+    <ManagedDir Condition="'$(GAME_MANAGED_DIR)' != ''">$(GAME_MANAGED_DIR)</ManagedDir>
+
+    <!-- 引用列表：validate_mod 通过环境变量传入（mod-repo.json 的 compile.references）。
+         走环境变量而不是 -p: 是因为 MSBuild 命令行里的分号必须转义成 %3B，
+         而转义后的值在 Include 里又不再被当作列表分隔符 —— 两个程序集会并成一项。
+         环境变量不经过命令行解析，分号保持字面值，Include 才能正常切分。 -->
+    <GameAssemblies Condition="'$(GameAssemblies)' == '' and '$(STS2_GAME_ASSEMBLIES)' != ''">$(STS2_GAME_ASSEMBLIES)</GameAssemblies>
+    <GameAssemblies Condition="'$(GameAssemblies)' == ''">sts2;0Harmony</GameAssemblies>
+  </PropertyGroup>
+
+  <Target Name="RequireManagedDir" BeforeTargets="ResolveReferences" Condition="'$(ManagedDir)' == ''">
+    <Error Text="GAME_MANAGED_DIR is not set. Set it to the game's data directory that holds sts2.dll (mac: SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64) or run validate_mod, which passes it for you." />
+  </Target>
+
+  <!-- 只引用声明的游戏程序集。通配 $(ManagedDir)/*.dll 会把 .NET 框架程序集也带进来，
+       造成 CS0234 一类类型冲突（在 duckov 上实测过），所以这里刻意用显式列表。 -->
+  <ItemGroup>
+    <GameAssembly Include="$(GameAssemblies)" Condition="'$(GameAssemblies)' != ''" />
+    <!-- references 里写的是完整文件名（含 .dll），所以直接拼目录，不再补扩展名 -->
+    <Reference Include="@(GameAssembly->'$(ManagedDir)/%(Identity)')" Condition="Exists('$(ManagedDir)')">
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

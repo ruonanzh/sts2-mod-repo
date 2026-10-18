@@ -1,0 +1,766 @@
+/**
+ * 路径判据 + 运行时状态的共享实现（game repo 内部库，**不是**工具）。
+ *
+ * 为什么放在 `.pi/lib/`：pi 会自动加载 `.pi/extensions/*.ts` 和 子目录里的 index.ts，
+ * 共享模块放进 extensions/ 会被当成扩展加载。这里由各工具用相对路径 import。
+ *
+ * 这里的判据是**游戏专属知识**（Duckov 自带的程序集名、Steam 目录形状等）：
+ * check_game_paths / set_game_dir / try_set_game_dir / check_runtime / install_mod 共用同一份，
+ * 保证"验"与"装"不会各写一套、各自漂移。
+ *
+ * 三类路径的性质不同，判据也不同：
+ *   · gameDir       只读参考 → 必须**验出真身**（找不到就失败）
+ *   · workshopDir   只读参考、可选 → 不存在就不设
+ *   · modInstallDir 我方写入目标 → 不存在是**正常的初始状态**（装的时候创建），
+ *                   但要验"这条路径确实长在游戏目录里"（向上找兄弟目录里的哨兵）
+ */
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { execFileSync } from "node:child_process";
+/** 游戏自带的程序集（哨兵）：它在，才说明这个目录确实是这个游戏。
+ *  **值来自 `mod-repo.json` 的 `sentinel`**；这里只是兜底（未配置时为空，判据退化为「Managed 目录存在」）。 */
+export let GAME_SENTINEL = "";
+
+export interface ModRepoConfig {
+  /** 该游戏的哨兵程序集名（`mod-repo.json` 的 `sentinel`） */
+  sentinel?: string;
+  game?: {
+    name?: string;
+    steamAppId?: string | number;
+    installDirHint?: Record<string, string>;
+  };
+  compile?: { managedDir?: Record<string, string> };
+  modInstall?: { path?: Record<string, string>; relativeTo?: string };
+  /** 这个游戏**有没有创意工坊**（U29/U30）。缺失 = 未知 —— **不是** false。 */
+  workshop?: { supported?: boolean };
+}
+
+/**
+ * 契约里声明的「有没有创意工坊」：`true` / `false` / `null`（未声明 = 未知）。
+ *
+ * 全仓库只留这一份判据：消费者（check_game_paths 等）不要再自己读 `cfg.workshop` ——
+ * 否则“字段缺失算不算 false”会在多处实现得不一致。
+ */
+export function workshopSupported(cfg: ModRepoConfig): boolean | null {
+  const value = cfg.workshop?.supported;
+  return typeof value === "boolean" ? value : null;
+}
+
+export interface RuntimeState {
+  gameDir?: string | null;
+  managedDir?: string | null;
+  workshopDir?: string | null;
+  modInstallDir?: string | null;
+  runtime?: unknown;
+  [key: string]: unknown;
+}
+
+export interface PathVerdict {
+  ok: boolean;
+  path: string | null;
+  reason?: string;
+  /** 给 agent 的下一步（可执行、面向玩家可读） */
+  next?: string;
+}
+
+/** 配置里用的平台键（mod-repo.json 的 windows/mac/linux） */
+export const platformKey = (): string =>
+  process.platform === "win32"
+    ? "windows"
+    : process.platform === "darwin"
+      ? "mac"
+      : "linux";
+
+export const statePath = (cwd: string): string =>
+  join(cwd, ".gamer-agent.local.json");
+
+/** 原始契约文件 `mod-repo.json`（本仓库唯一的契约文件；只有常量，不含判据）。
+ *  StS2 的骨架在 unity-mono-mod 基础上合并了 `mod-repo.json`：
+ *  guide §5 规定文件名固定为 `mod-repo.json`，不再保留两份。 */
+export interface GameConfig {
+  name?: string;
+  loader?: string;
+  entry?: { manifestFile?: string; classNameTemplate?: string; installDir?: string; initializerAttribute?: string };
+  sentinel?: string;
+  steamAppId?: string | number;
+  installDirHint?: Record<string, string>;
+  /** 可写成单值，也可按平台分写（StS2 必须按平台分写：mac 与 windows 的数据目录完全不同） */
+  managedDir?: string | Record<string, string>;
+  /** 同上；来自 `mod-repo.json` 的 `modInstall.path` */
+  modInstallPath?: string | Record<string, string>;
+  assetsDir?: string;
+  /** 编译需要的 .NET SDK 主版本下限（来自 `compile.sdkMajor`） */
+  sdkMajor?: number;
+  assemblies?: string[];
+  modules?: string[];
+  /** 该游戏允许的 config action 名。空数组 = 不校验 action；缺省 = 用骨架的默认集合。 */
+  actions?: string[];
+  workshop?: boolean;
+  /** 可选的每游戏数据检查（缺省则跳过；见 mod-lint） */
+  checks?: Record<string, string>;
+}
+
+/** 把 `string | {platform: string}` 归一成平台表；单值则复制到所有平台。 */
+function perPlatform(
+  value: string | Record<string, string> | undefined,
+  platforms: string[],
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!value) return out;
+  if (typeof value === "string") {
+    for (const p of platforms) out[p] = value;
+    return out;
+  }
+  for (const p of platforms) {
+    const v = value[p];
+    if (typeof v === "string" && v.trim()) out[p] = v;
+  }
+  return out;
+}
+
+export function readGameConfig(cwd: string): GameConfig {
+  const raw = JSON.parse(readFileSync(join(cwd, "mod-repo.json"), "utf8")) as {
+    game?: { name?: string; steamAppId?: string | number; installDirHint?: Record<string, string> };
+    loader?: string;
+    entry?: GameConfig["entry"];
+    sentinel?: string;
+    compile?: {
+      managedDir?: string | Record<string, string>;
+      references?: string[];
+      sdkMajor?: number;
+    };
+    modInstall?: { path?: string | Record<string, string> };
+    workshop?: { supported?: boolean };
+    actions?: string[];
+    checks?: Record<string, string>;
+  };
+
+  const cfg: GameConfig = {
+    name: raw.game?.name,
+    loader: raw.loader,
+    entry: raw.entry,
+    sentinel: raw.sentinel,
+    steamAppId: raw.game?.steamAppId,
+    installDirHint: raw.game?.installDirHint,
+    managedDir: raw.compile?.managedDir,
+    modInstallPath: raw.modInstall?.path,
+    sdkMajor: typeof raw.compile?.sdkMajor === "number" ? raw.compile.sdkMajor : undefined,
+    assemblies: raw.compile?.references,
+    workshop: typeof raw.workshop?.supported === "boolean" ? raw.workshop.supported : undefined,
+    actions: raw.actions,
+    checks: raw.checks,
+  };
+  GAME_SENTINEL = typeof cfg.sentinel === "string" ? cfg.sentinel : "";
+  return cfg;
+}
+
+/**
+ * 把 `mod-repo.json` 映射成旧的 `ModRepoConfig` 形状 —— 让搬过来的扩展不必改判断逻辑。
+ * 只做形状换算，不加语义。
+ */
+export function readModRepoConfig(cwd: string): ModRepoConfig {
+  const g = readGameConfig(cwd);
+  const platforms = ["windows", "mac", "linux"];
+  return {
+    sentinel: g.sentinel ?? "",
+    game: { name: g.name, steamAppId: g.steamAppId, installDirHint: g.installDirHint },
+    compile: { managedDir: perPlatform(g.managedDir, platforms) },
+    modInstall: { path: perPlatform(g.modInstallPath, platforms), relativeTo: "gameDir" },
+    workshop: typeof g.workshop === "boolean" ? { supported: g.workshop } : undefined,
+  };
+}
+
+export function readState(cwd: string): RuntimeState {
+  try {
+    return JSON.parse(readFileSync(statePath(cwd), "utf8")) as RuntimeState;
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * 读改写 + **原子替换**。以前只有 check_runtime 写这个文件；现在路径工具也写它，
+ * 所以统一走这里：写临时文件再 rename，避免留下半个 JSON（同盘 rename 是原子的）。
+ */
+export function writeState(cwd: string, patch: RuntimeState): RuntimeState {
+  const next = { ...readState(cwd), ...patch };
+  const file = statePath(cwd);
+  const tmp = `${file}.tmp-${process.pid}`;
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+  renameSync(tmp, file);
+  return next;
+}
+
+/** 展开 `~` / `~/…`（mod-repo.json 的 installDirHint 是这么写的；不展开会永远验不过） */
+export const expandHome = (p: string): string => {
+  const t = p.trim();
+  if (t !== "~" && !t.startsWith("~/")) return t;
+  return join(process.env.HOME ?? process.env.USERPROFILE ?? "", t.slice(2));
+};
+
+/** 把工具入参里的相对路径按 workspace 根解析（与其它工具一致） */
+export const resolveUserPath = (cwd: string, p: string): string =>
+  resolve(cwd, expandHome(p));
+
+/** 编译要引用的程序集目录（由 gameDir + mod-repo.json 拼出来，不信任状态里存的值） */
+export function managedDirFor(
+  gameDir: string,
+  cfg: ModRepoConfig,
+  platform = platformKey(),
+): string | null {
+  const rel = cfg.compile?.managedDir?.[platform];
+  if (typeof rel !== "string" || !rel) return null;
+  const exact = join(gameDir, rel);
+  if (existsSync(exact)) return exact;
+  // StS2 在 mac 上有两份数据目录：data_sts2_macos_arm64 与 data_sts2_macos_x86_64
+  // （Godot 按进程架构选，Rosetta 下走 x86_64）。契约里只写了一份；
+  // 写的那份不存在时退到同级的兄弟目录，而不是直接判 FAIL。
+  const m = /^(data_sts2_macos)_/.exec(basename(rel));
+  if (m) {
+    try {
+      const sibling = readdirSync(dirname(exact)).find((f) => f.startsWith(`${m[1]}_`));
+      if (sibling) return join(dirname(exact), sibling);
+    } catch {
+      // 目录读不到就走原路径，由 sentinelOk 给出可读的失败原因
+    }
+  }
+  return exact;
+}
+
+/** mod 安装目标（相对 gameDir，见 mod-repo.json 的 modInstall.relativeTo=gameDir） */
+export function modInstallDirFor(
+  gameDir: string,
+  cfg: ModRepoConfig,
+  platform = platformKey(),
+): string | null {
+  const rel = cfg.modInstall?.path?.[platform];
+  return typeof rel === "string" && rel.trim() ? join(gameDir, rel) : null;
+}
+
+const NEXT_SKILL =
+  "The 'setup-workspace' skill has the full procedure (auto-discovery, using the player's hints, and what to ask if nothing works).";
+
+/** 未配置哨兵时：Managed 目录里只要有任意 .dll 就算通过（退化判据，避免整条链卡死）。 */
+function sentinelName(cfg: ModRepoConfig): string {
+  return cfg.sentinel && cfg.sentinel.trim() ? cfg.sentinel.trim() : "(unset sentinel in mod-repo.json)";
+}
+
+function sentinelOk(managed: string, cfg: ModRepoConfig): boolean {
+  const name = cfg.sentinel?.trim();
+  if (name) return existsSync(join(managed, name));
+  try {
+    return readdirSync(managed).some((f) => f.toLowerCase().endsWith(".dll"));
+  } catch {
+    return false;
+  }
+}
+
+/** 判据 1：这个目录是不是这个游戏的安装目录（看游戏自带的哨兵程序集） */
+export function checkGameDir(
+  dir: string | null | undefined,
+  cfg: ModRepoConfig,
+  platform = platformKey(),
+): PathVerdict {
+  const p = dir ? expandHome(dir) : null;
+  if (!p)
+    return {
+      ok: false,
+      path: null,
+      reason: "no game directory was given",
+      next: `Run try_set_game_dir (no arguments) to discover the game and record it (the derived paths come along), or verify candidates from the player's hints with check_game_paths. ${NEXT_SKILL}`,
+    };
+  const managed = managedDirFor(p, cfg, platform);
+  if (!managed)
+    return {
+      ok: false,
+      path: p,
+      reason: "mod-repo.json has no compile.managedDir entry for this platform",
+      next: "Reopen or update this game workspace (do not edit the maintainer configuration).",
+    };
+  if (!sentinelOk(managed, cfg))
+    return {
+      ok: false,
+      path: p,
+      reason: `the game's own ${sentinelName(cfg)} was not found under this directory (expected in ${managed})`,
+      next: `Run try_set_game_dir (no arguments) to re-discover the real game directory (the one you passed does not look like it: no game marker next to it). ${NEXT_SKILL}`,
+    };
+  return { ok: true, path: p };
+}
+
+/** 判据 2：mod 安装目标 —— 必须是**当前平台**的游戏 mod 目录（用兄弟 Managed 的哨兵验证）
+ *
+ * 平台纯校验（2026-09-27）：只接受 `<gameDir>/<modInstall.path[当前平台]>` 这一个形状。
+ * 以前把 Windows/macOS 两种布局都列为 anchors，导致在 Windows 上会**错误接受** macOS 形状的路径（反之亦然）。
+ */
+export function checkModInstallDir(
+  dir: string | null | undefined,
+  cfg: ModRepoConfig,
+  platform = platformKey(),
+): PathVerdict {
+  // 状态里可能是历史遗留的 ~/… → 统一展开后再判
+  const p = dir ? expandHome(dir) : null;
+  if (!p)
+    return {
+      ok: false,
+      path: null,
+      reason: "no mod install directory was given",
+      next: `Run try_set_game_dir (no arguments): it locates the game and records the derived paths. ${NEXT_SKILL}`,
+    };
+  const rel = cfg.modInstall?.path?.[platform];
+  const relFlat = typeof rel === "string" ? rel.replace(/\\/g, "/").replace(/\/+$/, "") : null;
+  if (relFlat) {
+    const norm = p.replace(/\\/g, "/").replace(/\/+$/, "");
+    const suffix = "/" + relFlat;
+    if (!norm.endsWith(suffix)) {
+      return {
+        ok: false,
+        path: p,
+        reason: `this path is not this game's mod directory (expected <gameDir>/${relFlat} on ${platform})`,
+        next: `Run try_set_game_dir (no arguments) to record the platform-correct paths. ${NEXT_SKILL}`,
+      };
+    }
+    const gameDir = norm.slice(0, norm.length - suffix.length);
+    const managed = managedDirFor(gameDir, cfg, platform);
+    if (!managed || !sentinelOk(managed, cfg)) {
+      return {
+        ok: false,
+        path: p,
+        reason: `the game's own ${sentinelName(cfg)} was not found under ${managed ?? gameDir} - the game may have moved or been uninstalled`,
+        next: `Run try_set_game_dir (no arguments) to re-locate the game and re-derive this path. ${NEXT_SKILL}`,
+      };
+    }
+    return { ok: true, path: p };
+  }
+  return { ok: true, path: p };
+}
+
+/** 判据 3：Steam Workshop 内容目录（只读参考；必须是 …/steamapps/workshop/content/<appId>） */
+export function checkWorkshopDir(
+  dir: string | null | undefined,
+  appId: string,
+): PathVerdict {
+  // 状态里可能是历史遗留的 ~/… → 统一展开后再判
+  const p = dir ? expandHome(dir) : null;
+  if (!p)
+    return {
+      ok: false,
+      path: null,
+      reason: "no Workshop directory was given (optional)",
+      next: "Omit it; it is only used to read Workshop content for reference.",
+    };
+  if (!existsSync(p))
+    return {
+      ok: false,
+      path: p,
+      reason: "the directory does not exist",
+      next: "Omit this argument (the Workshop directory is an optional read-only reference).",
+    };
+  // 归一化（反斜杠/尾斜杠/大小写）后比较 —— Windows 路径不区分大小写；
+  // appid 未知时只校验存在性（形状校验是"当我们知道规则"时才有意义）。
+  const norm = (v: string) =>
+    v.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  if (appId && !norm(p).endsWith(norm(`/workshop/content/${appId}`)))
+    return {
+      ok: false,
+      path: p,
+      reason: `the path does not end with workshop/content/${appId} (see the appid in mod-repo.json)`,
+      next: "Confirm this is the Workshop content directory for this game; omit it if unsure.",
+    };
+  return { ok: true, path: p };
+}
+
+// ── Steam 库发现（区分操作系统）────────────────────────────────────────────
+// 工具链原来只靠 installDirHint（默认 C 盘），游戏装在非默认盘时找不到。
+// 参考 EU5 的做法扫 Steam 库，但 Duckov 支持 windows + mac，所以要分平台：
+//   · windows：注册表 HKCU\Software\Valve\Steam 的 SteamPath + 常见默认路径
+//   · mac    ：~/Library/Application Support/Steam（Steam 固定位置，无注册表）
+// 两者的 libraryfolders.vdf 格式相同（"path" 字段列出各库），解析共用。
+
+/** Windows：从注册表读 Steam 安装路径（mac 无此项）。 */
+function readRegistrySteamPath(): string | null {
+  try {
+    const out = execFileSync("reg", ["query", "HKCU\\Software\\Valve\\Steam", "/v", "SteamPath"], {
+      encoding: "utf8",
+      windowsHide: true,
+      stdio: ["ignore", "pipe", "ignore"],
+    });
+    const m = out.match(/SteamPath\s+REG_SZ\s+(.+)/i);
+    return m ? m[1].trim() : null;
+  } catch {
+    return null;
+  }
+}
+
+/** 读某个 Steam 根下的 libraryfolders.vdf，返回它列出的各库根（跨平台格式相同）。 */
+function parseLibraryFolders(steamRoot: string): string[] {
+  try {
+    const text = readFileSync(join(steamRoot, "steamapps", "libraryfolders.vdf"), "utf8");
+    const roots: string[] = [];
+    const re = /"path"\s+"([^"]+)"/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) roots.push(m[1].replace(/\\\\/g, "\\"));
+    return roots;
+  } catch {
+    return [];
+  }
+}
+
+/** 该平台的 Steam 根候选（不存在的也没关系，后续用哨兵验证会自然滤掉）。 */
+function steamRoots(platform: string): string[] {
+  const roots: string[] = [];
+  if (platform === "windows") {
+    const fromRegistry = readRegistrySteamPath();
+    if (fromRegistry) roots.push(fromRegistry);
+    for (const p of ["C:\\Program Files (x86)\\Steam", "C:\\Program Files\\Steam"]) roots.push(p);
+  } else if (platform === "mac") {
+    const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+    if (home) roots.push(join(home, "Library", "Application Support", "Steam"));
+  }
+  return [...new Set(roots)];
+}
+
+/** 所有 Steam 库根：各 Steam 根自身 + 它们 libraryfolders.vdf 列出的库（去重）。 */
+function discoverSteamLibraryRoots(platform: string): string[] {
+  const roots = steamRoots(platform);
+  const all = [...roots];
+  for (const r of roots) {
+    for (const lib of parseLibraryFolders(r)) {
+      if (!all.includes(lib)) all.push(lib);
+    }
+  }
+  return all;
+}
+
+// ── 发现（Duckov：显式入参 → 缓存 → mod-repo.json 的平台提示 → 各 Steam 库）──
+export interface TriedCandidate {
+  path: string;
+  reason?: string;
+}
+
+/** 候选游戏目录（去重、保序） */
+export function gameDirCandidates(
+  cfg: ModRepoConfig,
+  state: RuntimeState,
+  platform = platformKey(),
+  explicit?: string,
+): string[] {
+  const out: string[] = [];
+  const push = (v: unknown) => {
+    if (typeof v === "string" && v.trim()) out.push(v);
+  };
+  if (explicit?.trim()) push(explicit);
+  push(state.gameDir);
+  push(cfg.game?.installDirHint?.[platform]);
+  // 各 Steam 库的 steamapps/common/<游戏目录名>（目录名取自 installDirHint 的 basename，
+  // 比 cfg.game.name 可靠——后者是显示名，未必等于文件夹名）。
+  const folder = basename(cfg.game?.installDirHint?.[platform] ?? "") || cfg.game?.name;
+  if (folder) {
+    for (const root of discoverSteamLibraryRoots(platform)) {
+      push(join(root, "steamapps", "common", folder));
+    }
+  }
+  return [...new Set(out)];
+}
+
+/** 依次验证候选，返回第一个通过的游戏目录（**发现 ≠ 信任**：每个候选都过 checkGameDir） */
+export function discoverGameDir(
+  cfg: ModRepoConfig,
+  state: RuntimeState,
+  platform = platformKey(),
+  explicit?: string,
+): { gameDir: string | null; tried: TriedCandidate[] } {
+  const tried: TriedCandidate[] = [];
+  for (const c of gameDirCandidates(cfg, state, platform, explicit)) {
+    const v = checkGameDir(c, cfg, platform);
+    if (v.ok) return { gameDir: v.path ?? c, tried }; // 存绝对路径：不把 ~/... 写进状态
+    tried.push({ path: c, reason: v.reason });
+  }
+  return { gameDir: null, tried };
+}
+
+/** 由已确认的 gameDir 派生其余路径；只读参考类目录**不存在就不记**（不让状态撒谎） */
+export function pathsFromGameDir(
+  gameDir: string,
+  cfg: ModRepoConfig,
+  platform = platformKey(),
+): {
+  managedDir: string | null;
+  modInstallDir: string | null;
+  workshopDir: string | null;
+  notes: string[];
+} {
+  const notes: string[] = [];
+  const managedDir = managedDirFor(gameDir, cfg, platform);
+  const modInstallDir = modInstallDirFor(gameDir, cfg, platform);
+  let workshopDir: string | null = null;
+  const appId = cfg.game?.steamAppId;
+  if (appId) {
+    const ws = join(
+      dirname(dirname(gameDir)),
+      "workshop",
+      "content",
+      String(appId),
+    );
+    if (existsSync(ws)) workshopDir = ws;
+    else
+      notes.push(
+        `NOTE: the Workshop directory does not exist, so it was not recorded (optional, read-only reference): ${ws}`,
+      );
+  }
+  return { managedDir, modInstallDir, workshopDir, notes };
+}
+
+// ── agent 入口的内部实现（**不注册为工具**）────────────────────────────────────
+// 语义（set_game_dir 用；「发现」那一层由 try_set_game_dir 走 ensureGameDir）：
+//   ① 给了路径 → 用判据验 → 过 → 落库（PASS）
+//   ② 没过 → 走内部发现/派生（"无参那一层"）→ 成功 → 落库 + WARN（说明给的那条为什么没用、实际记的是哪条）
+//   ③ 内部也失败 → FAIL（**不落库**：不做假成功）
+export type PathKind = "gameDir" | "workshopDir" | "modInstallDir";
+
+export interface PathOutcome {
+  kind: PathKind;
+  status: "PASS" | "WARN" | "FAIL";
+  given: string | null;
+  recorded: string | null;
+  /** WARN/FAIL 的原因（为什么给的那条不算数） */
+  reason?: string;
+  /** 给 agent 的下一步 */
+  next?: string;
+}
+
+const ASK_PLAYER =
+  "Automatic discovery failed as well. Ask the player for the correct path (say what you already tried), then call this setter again with it. The 'setup-workspace' skill has what to ask for.";
+
+function verifyPath(
+  kind: PathKind,
+  p: string,
+  cfg: ModRepoConfig,
+  appId: string,
+): PathVerdict {
+  if (kind === "gameDir") return checkGameDir(p, cfg);
+  if (kind === "workshopDir") return checkWorkshopDir(p, appId);
+  return checkModInstallDir(p);
+}
+
+/** 内部发现/派生（无参那一层）：游戏目录走发现，其它两条由已确认的游戏目录派生 */
+function deriveFallback(
+  cwd: string,
+  cfg: ModRepoConfig,
+  kind: PathKind,
+): { ok: boolean; path?: string; note?: string; reason?: string } {
+  const state = readState(cwd);
+  const rememberedGame = checkGameDir(
+    typeof state.gameDir === "string" ? state.gameDir : null,
+    cfg,
+  );
+  const gameDir = rememberedGame.ok
+    ? (rememberedGame.path as string)
+    : (() => {
+        const d = discoverGameDir(cfg, state);
+        return d.gameDir;
+      })();
+  if (!gameDir) {
+    return {
+      ok: false,
+      reason: "automatic discovery could not find the game either",
+    };
+  }
+  if (kind === "gameDir") return { ok: true, path: gameDir };
+  const derived = pathsFromGameDir(gameDir, cfg);
+  const path =
+    kind === "workshopDir" ? derived.workshopDir : derived.modInstallDir;
+  if (!path)
+    return {
+      ok: false,
+      reason: `${kind} cannot be derived from the game directory`,
+    };
+  return { ok: true, path, note: derived.notes.join(" ") };
+}
+
+/** 落库：设游戏目录时连带刷新它的派生项；设单条时只改那一条 */
+function record(
+  cwd: string,
+  cfg: ModRepoConfig,
+  kind: PathKind,
+  path: string,
+): void {
+  if (kind === "gameDir") {
+    const d = pathsFromGameDir(path, cfg);
+    writeState(cwd, {
+      gameDir: path,
+      managedDir: d.managedDir,
+      modInstallDir: d.modInstallDir,
+      workshopDir: d.workshopDir ?? null,
+    });
+    return;
+  }
+  writeState(
+    cwd,
+    kind === "modInstallDir" ? { modInstallDir: path } : { workshopDir: path },
+  );
+}
+
+/** 单个字段的「验 → 不过则内部发现 → 都失败则 FAIL」 */
+/** 派生两条的可读提醒（不阻塞，只说明现状）*/
+function derivedWarnings(modInstallDir: string | null, workshopDir: string | null): string[] {
+  const out: string[] = [];
+  if (modInstallDir && !existsSync(modInstallDir)) {
+    out.push(
+      "the mod directory does not exist yet - normal on a first install (install_mod creates it).",
+    );
+  }
+  if (!modInstallDir) {
+    out.push("mod-repo.json declares no mod install path for this platform.");
+  }
+  if (!workshopDir) {
+    out.push(
+      "no Steam Workshop directory was found (optional; it is only used to read existing Workshop mods).",
+    );
+  }
+  return out;
+}
+
+/** try_set_game_dir 的结果（三种成功/失败语义分开，agent 一眼能分辨）*/
+export type EnsureOutcome =
+  | {
+      status: "already";
+      gameDir: string;
+      modInstallDir: string | null;
+      workshopDir: string | null;
+      warnings: string[];
+    }
+  | {
+      status: "recorded";
+      gameDir: string;
+      modInstallDir: string | null;
+      workshopDir: string | null;
+      warnings: string[];
+    }
+  | { status: "missing"; reason: string };
+
+/**
+ * `try_set_game_dir` 的实现：**确保游戏目录（以及由它派生的 mod 安装目录 / 创意工坊目录）已就绪**。
+ *
+ * 语义（无参、幂等）：
+ *   ① 记住的 gameDir 仍有效，且派生的两条与当前平台一致 → 什么都不写 → `already`
+ *   ② 无效 / 过期 / 没记过 → 自动发现（每个候选都过哨兵）→ 记录（含派生两条）→ `recorded`
+ *   ③ 找不到 → 不写状态 → `missing`
+ */
+export function ensureGameDir(cwd: string, cfg: ModRepoConfig): EnsureOutcome {
+  const platform = platformKey();
+  const state = readState(cwd);
+  const remembered = checkGameDir(
+    typeof state.gameDir === "string" ? state.gameDir : null,
+    cfg,
+    platform,
+  );
+  if (remembered.ok) {
+    const d = pathsFromGameDir(remembered.path as string, cfg, platform);
+    const same =
+      state.managedDir === d.managedDir &&
+      (state.modInstallDir ?? null) === (d.modInstallDir ?? null) &&
+      (state.workshopDir ?? null) === (d.workshopDir ?? null);
+    if (same) {
+      return {
+        status: "already",
+        gameDir: remembered.path as string,
+        modInstallDir: d.modInstallDir,
+        workshopDir: d.workshopDir,
+        warnings: derivedWarnings(d.modInstallDir, d.workshopDir),
+      };
+    }
+  }
+  const { gameDir } = discoverGameDir(cfg, state, platform);
+  if (!gameDir) {
+    return {
+      status: "missing",
+      reason:
+        "automatic discovery did not find the game (this platform's Steam locations and every library were searched)",
+    };
+  }
+  record(cwd, cfg, "gameDir", gameDir);
+  const d = pathsFromGameDir(gameDir, cfg, platform);
+  return {
+    status: "recorded",
+    gameDir,
+    modInstallDir: d.modInstallDir,
+    workshopDir: d.workshopDir,
+    warnings: derivedWarnings(d.modInstallDir, d.workshopDir),
+  };
+}
+
+export function setPathWithFallback(
+  cwd: string,
+  cfg: ModRepoConfig,
+  kind: PathKind,
+  givenRaw: string | null,
+): PathOutcome {
+  const appId = String(cfg.game?.steamAppId ?? "");
+  const given = givenRaw && givenRaw.trim() ? expandHome(givenRaw) : null;
+  if (!given) {
+    return {
+      kind,
+      status: "FAIL",
+      given: null,
+      recorded: null,
+      reason: "no path was given",
+      next: `No path was passed. Run try_set_game_dir (no arguments) to locate the game and record the derived paths. ${NEXT_SKILL}`,
+    };
+  }
+
+  const v = verifyPath(kind, given, cfg, appId);
+  if (v.ok) {
+    record(cwd, cfg, kind, given);
+    return { kind, status: "PASS", given, recorded: given };
+  }
+
+  const fallback = deriveFallback(cwd, cfg, kind);
+  if (fallback.ok && fallback.path) {
+    record(cwd, cfg, kind, fallback.path);
+    return {
+      kind,
+      status: "WARN",
+      given,
+      recorded: fallback.path,
+      reason: v.reason,
+      next: `The path you passed did not pass validation, so ${fallback.path} was located and recorded instead.${fallback.note ? ` ${fallback.note}` : ""} Tell the player which path is actually in use.`,
+    };
+  }
+
+  return {
+    kind,
+    status: "FAIL",
+    given,
+    recorded: null,
+    reason: `${v.reason} (${fallback.reason ?? "and it could not be derived either"})`,
+    next: ASK_PLAYER,
+  };
+}
+
+/** 四个 setter 共用的输出格式（PASS / WARN / FAIL 三种语义各说清） */
+export function formatPathOutcome(o: PathOutcome): {
+  text: string;
+  ok: boolean;
+  status: PathOutcome["status"];
+} {
+  if (o.status === "PASS")
+    return {
+      text: `PASS: recorded ${o.kind} ${o.recorded} (validated).`,
+      ok: true,
+      status: o.status,
+    };
+  if (o.status === "WARN")
+    return {
+      text:
+        `WARN: the ${o.kind} you passed (${o.given}) did not pass validation - ${o.reason}.\n` +
+        `Recorded ${o.recorded} instead.\nNEXT: ${o.next ?? "Tell the player which path is actually in use."}`,
+      ok: true,
+      status: o.status,
+    };
+  return {
+    text: `FAIL: could not record ${o.kind}.\nGiven: ${o.given ?? "(none)"}\nReason: ${o.reason ?? "unknown"}.\nNEXT: ${o.next ?? ASK_PLAYER}`,
+    ok: false,
+    status: o.status,
+  };
+}
