@@ -50,7 +50,7 @@ your_mods/<目录名>/
 
 ## 硬规则
 
-- **不猜类名/字段名**：用 `inspect_game_api` 查。`action=search` 列出真实类型名，`action=source` 反编译读源码。查到的事实连同查询词写进 `docs/`。
+- **不猜类名/字段名**：用 `inspect_api` 查。`action=search` 列出真实类型名，`action=source` 反编译读源码。查到的事实连同查询词写进 `docs/`。
 - **装进去 ≠ 会被加载**：游戏的 `settings.save` 里有总开关 `mod_settings.mods_enabled`，为 `false` 时每个 mod 都 `Disabled` 且**不报错**。`install_mod` 会报这个状态；为 false 时必须告诉玩家去开。
 - **不写游戏目录里的其他文件**：只往 mods 根下写自己的目录，不碰 `settings.save`、不碰 `.pck`。
 - **一次改动一次验证**：改完要能编译、能加载，并给出可复现的检查方式（看 `godot.log`）。

@@ -24,7 +24,7 @@ v1 **不带资源包**（`compile.pck: false`）。要加 `.pck` 需要先打通
 | `check_runtime` | .NET 9 SDK 是否就绪 |
 | `try_set_game_dir` / `set_game_dir` / `check_game_paths` | 发现、记录、校验三条路径 |
 | `validate_mod` | 校验清单 + 编译 + 检查产物 |
-| `inspect_game_api` | 按名字查游戏类型，并反编译读源码（不猜类名） |
+| `inspect_api` | 按名字查游戏类型，并反编译读源码（不猜类名） |
 | `install_mod` | 复制到游戏的 mods 目录，并报告加载总开关的状态 |
 
 路径与判据都在 `.pi/lib/`；`mod-repo.json` 只放常量。

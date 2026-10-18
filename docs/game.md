@@ -111,8 +111,8 @@ mac 有两份数据目录（`data_sts2_macos_arm64` / `data_sts2_macos_x86_64`�
 
 ## 8. 用 fetch 查名字的边界
 
-`inspect_game_api` 读的是**游戏自带的** `sts2.dll`（6381 个类型）。所以：
+`inspect_api` 同时读**游戏的** `sts2.dll`（6381 个类型）与**BaseLib 的** `BaseLib.dll`（1015 个类型），结果带 `[game]` / `[baselib]` 标签。所以：
 
 - 游戏自己的类型都能查到并反编译。
-- **BaseLib 的类型查不到**（`CustomCardModel` 等），因为 BaseLib 是一个 mod，不在游戏目录里。要用它，读 BaseLib 的源码或 wiki。
+- BaseLib 的类型能查，但前提是**本机已 restore 过它**（某个 mod 引用它并 restore 之后，包会落在 NuGet 缓存里）。没 restore 时工具会说明并只搜游戏。
 - `sts2.xml` 只是 `<summary>` 注释的集合（19635 条），**没有注释的成员不在里面**。例如 `CardModel.PortraitPath` 就没有文档，只能靠反编译看。所以查成员名字一律用 `action=source` 读类型源码。

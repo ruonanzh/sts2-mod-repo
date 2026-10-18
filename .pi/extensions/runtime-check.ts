@@ -71,7 +71,7 @@ export default function (pi: ExtensionAPI) {
           });
           toolsNote = " Local tools restored (ilspycmd).";
         } catch (e) {
-          toolsNote = ` WARN: dotnet tool restore failed (${(e as Error).message.split("\n")[0]}); inspect_game_api will fall back to the documentation file.`;
+          toolsNote = ` WARN: dotnet tool restore failed (${(e as Error).message.split("\n")[0]}); inspect_api will fall back to the documentation file.`;
         }
       }
 

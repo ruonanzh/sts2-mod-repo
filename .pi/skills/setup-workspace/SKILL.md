@@ -47,4 +47,4 @@ macOS 上 modInstallDir 形如 `.../SlayTheSpire2.app/Contents/MacOS/mods`。它
 | `check_game_paths` 报 modInstallDir 不存在 | mods 目录需要时创建，游戏不会建 | 正常。`install_mod` 会创建它 |
 | `check_game_paths` 报 Workshop 目录没记录 | 玩家没订阅任何 mod | 正常，可选参考路径。不影响做 mod |
 | 路径 PASS 但游戏里看不到 mod | 加载总开关是关闭的 | 见 mod-installer 的验收段 |
-| `Local tools restored` 这句话没出现 | 仓库里没有 `.config/dotnet-tools.json`，或 restore 失败 | restore 失败时会写 WARN 并说明原因。没有网时它会失败，此时 `inspect_game_api` 只能读文档，**清单不完整** |
+| `Local tools restored` 这句话没出现 | 仓库里没有 `.config/dotnet-tools.json`，或 restore 失败 | restore 失败时会写 WARN 并说明原因。没有网时它会失败，此时 `inspect_api` 只能读文档，**清单不完整** |

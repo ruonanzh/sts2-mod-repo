@@ -54,7 +54,7 @@ description: 玩家想做一个 mod、加一段玩法、改卡牌数值、或加
 
    **目录里只能有一个 `.json`。** 加载器把任何 `.json` 都当清单读。
 
-4. 要用游戏 API 时先查名字，不得凭记忆：`inspect_game_api action=search query=<子串>`，再用 `action=source typeName=<全名>` 读源码。
+4. 要用游戏 API 时先查名字，不得凭记忆：`inspect_api action=search query=<子串>`，再用 `action=source typeName=<全名>` 读源码。
 5. 编译并校验：`validate_mod modDir=your_mods/<你的名字>`。
 
 ## 3. 验收
@@ -74,4 +74,4 @@ description: 玩家想做一个 mod、加一段玩法、改卡牌数值、或加
 | `dll looks like an empty stub` | csproj 把输出目录指到了工程根，SDK 把源文件排除了 | 删掉自定义 `OutputPath`，用默认的 `bin/Release` |
 | `NETSDK1045` | SDK 低于 9 | 见 setup-workspace |
 | `min_game_version is X but the installed game is Y` | 清单写的版本高于本机 | 改成不高于本机版本 |
-| 编译报找不到类型 | 类型名猜错，或没引用程序集 | 用 `inspect_game_api` 查真名；引用列表在 `mod-repo.json` 的 `compile.references` |
+| 编译报找不到类型 | 类型名猜错，或没引用程序集 | 用 `inspect_api` 查真名；引用列表在 `mod-repo.json` 的 `compile.references` |

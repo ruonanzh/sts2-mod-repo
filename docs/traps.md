@@ -28,7 +28,30 @@ Calling initializer method of type <T> for <id>, Version=...
 
 少了第二行说明程序集没加载（`has_dll` 或文件名问题）。少了第三行说明程序集加载了但没有 `[ModInitializer]`。
 
-## 2. 补丁写了但没效果
+## 2. 编译报 CS0012：缺的不是 BaseLib，是 sts2
+
+**症状**：
+
+```
+error CS0012: The type 'PowerModel' is defined in an assembly that is not referenced.
+You must add a reference to assembly 'sts2, Version=0.1.0.0, ...'.
+```
+
+**原因**：`BaseLib` 不是游戏的替代品，它是**架在游戏之上的一层**。`BaseLib.Abstracts.CustomPowerModel` 的基类是 `MegaCrit.Sts2.Core.Models.PowerModel`，所以在 `sts2.dll` 里。
+
+**实测**：写一个类，一个 MegaCrit 类名都不出现，只继承 BaseLib 的类型 ——
+
+```csharp
+public abstract class MyPower : BaseLib.Abstracts.CustomPowerModel { }
+```
+
+只引用 `BaseLib.dll` 时，编译器仍然要求 `sts2.dll`。继承关系本身就是引用。
+
+**所以**：两个程序集都要引用。这个仓库的 `mod-repo.json` 里 `compile.references` 已经是 `["sts2.dll","0Harmony.dll"]`，`compile.packages` 加了 BaseLib。
+
+**反过来也成立**：不继承 BaseLib 类型的 mod **不需要** BaseLib。`reference/example_mod` 就是零依赖的，照样能加载。BaseLib 只有要它的便利类时才引入。
+
+## 3. 补丁写了但没效果
 
 **症状**：DLL 加载成功，日志正常，但游戏行为没变。
 
@@ -42,7 +65,7 @@ Calling initializer method of type <T> for <id>, Version=...
 
 **确认方式**：在 prefix 里 `Log.Info` 一行，看它有没有出现在 `godot.log`。
 
-## 3. 编译"成功"但 dll 是空壳
+## 4. 编译"成功"但 dll 是空壳
 
 **症状**：`dotnet build` 退出 0，dll 存在，游戏能加载，但什么都没发生。
 
@@ -54,13 +77,13 @@ Calling initializer method of type <T> for <id>, Version=...
 strings -a <id>.dll | grep ModInitializerAttribute
 ```
 
-## 4. `version` 解析失败，依赖方全部 FAILED
+## 5. `version` 解析失败，依赖方全部 FAILED
 
 **症状**：别的 mod 声明依赖你，报 `MOD_ERROR.DEPENDENCY_VERSION_INVALID`。
 
 **原因**：`version` 不是 `x.y.z` 形式，游戏解析失败后 `Mod.version` 为 null。
 
-## 5. `min_game_version` 写太高
+## 6. `min_game_version` 写太高
 
 **症状**：mod 完全不加载，日志说明不支持的版本。
 
@@ -68,19 +91,19 @@ strings -a <id>.dll | grep ModInitializerAttribute
 
 **本机**：`v0.107.1`。改游戏版本后要一起改这里。
 
-## 6. `affects_gameplay` 设错
+## 7. `affects_gameplay` 设错
 
 **症状**：多人联机连不上，或对方的游戏状态和你不一样。
 
 **原因**：这个字段默认 **true**。纯外观 mod 设成 true 会被拉进 mod 一致性校验；改游戏逻辑的 mod 设成 false 会导致 desync。
 
-## 7. 同一个 mod 同时存在于 Workshop 与本地
+## 8. 同一个 mod 同时存在于 Workshop 与本地
 
 **症状**：日志 `DisabledDuplicate`。
 
 **原因**：`RemoveDisabledMods` 故意这么做——**本地优先**，方便 modder 开发。不是 bug。
 
-## 8. 带启动参数直接跑二进制
+## 9. 带启动参数直接跑二进制
 
 **症状**：游戏闪退或 Steam 没接管。
 
@@ -90,14 +113,14 @@ strings -a <id>.dll | grep ModInitializerAttribute
 open "steam://rungameid/2868840//-nomods"
 ```
 
-## 9. 改了 `settings.save` 但被迁移丢掉
+## 10. 改了 `settings.save` 但被迁移丢掉
 
 **症状**：手写的键启动后消失，行为不变。
 
 **原因**：`SettingsSave` 有版本迁移（本机从 v4 迁移到 v5 已经发生过一次），且键名走 `SnakeCaseLower`。
 **不得按反编译的属性名猜键名**：`PlayerAgreedToModLoading` 的落盘名是 `mods_enabled`。
 
-## 10. macOS 特有
+## 11. macOS 特有
 
 - mods 根在 **`.app` 包内**（`Contents/MacOS/mods/`），写进去会改动 bundle 内容。Steam 校验完整性时可能被清掉。
 - 游戏有 arm64 与 x86_64 两份数据目录，编译引用的 `sts2.dll` 要与当前进程架构一致（`managedDirFor` 会自动兜底）。
