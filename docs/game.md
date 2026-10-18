@@ -245,6 +245,37 @@ does not crash, so **the symptom is a card with no name, not a crash**.
 - **The verbatim snapshot of the official wiki is in `reference/base-lib-wiki/`.** Read that
   `INDEX.md` first to find the page, then use `inspect_api` to find the real name.
 
+## 7.1 Removing a mod does not break the save
+
+If a save names a model that no longer exists, the game substitutes a deprecated placeholder. This
+is built in, and it covers every content type:
+
+```csharp
+/// Obtains a card by ID, or falls back to the deprecated card if it's not found.
+/// This should only be used in save loading where it's okay to fall back to deprecated content.
+public static CardModel CardOrDeprecated(ModelId id)
+{
+    return ModelDb.GetByIdOrNull<CardModel>(id) ?? ModelDb.Card<DeprecatedCard>();
+}
+```
+
+`SaveUtil` holds the whole family: `CardOrDeprecated`, `RelicOrDeprecated`, `PotionOrDeprecated`,
+`EncounterOrDeprecated`, `EventOrDeprecated`, `AncientEventOrDeprecated`, `ModifierOrDeprecated`,
+`EnchantmentOrDeprecated`, `MonsterOrDeprecated`, `CharacterOrDeprecated`, `ActOrDeprecated`.
+
+So a run save that still holds a card from a removed mod loads normally. The card turns into
+`DeprecatedCard`: a status card named "deprecated card" with BETA art. When the player draws it, it
+draws a card, removes itself from the deck, and exhausts. Nothing is corrupted.
+
+Measured on 2026-10-18 by removing the mod from a save whose deck held
+`CARD.EXAMPLECARD-FOCUSED_STRIKE`: the deck entry appeared as that status card, and the run loaded.
+
+The `discovered_cards` list in `progress.save` also keeps the stale id. The card library builds a
+`HashSet<ModelId>` from it and compares by id, so a stale entry matches nothing and harms nothing.
+
+Do not conclude from `ModelDb.GetById` that a missing model crashes a load. `GetById` throws
+`ModelNotFoundException`, but the save path deliberately calls the `OrDeprecated` variant instead.
+
 ## 8. Limits when you find a name with fetch
 
 `inspect_api` reads both the `sts2.dll` of the **game** (6381 types) and the `BaseLib.dll` of
