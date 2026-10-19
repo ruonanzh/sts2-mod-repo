@@ -29,7 +29,7 @@ the other.
 
 1. **One fact, one home.** If two files must mention the same fact, only one explains it.
 2. **Every claim names its source.** A decompiled location is
-   `~/.gamer-agent-pi/decompiled/sts2/<build>/cs/<assembly>/<file>.cs:<line>`. A measurement names the date and the
+   `~/.gamer-agent-pi/decompiled/sts2-mod-repo/cs/<assembly>/<file>.cs:<line>`. A measurement names the date and the
    observation. A claim with no source is a guess and does not belong in these pages.
 3. **Do not keep a claim you cannot check.** A statement that the code no longer supports, or that
    nobody can measure, gets deleted. Rewriting it as "may" or "probably" is not allowed.
