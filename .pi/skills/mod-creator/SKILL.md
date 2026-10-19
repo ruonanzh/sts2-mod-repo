@@ -68,6 +68,8 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
    **The directory must hold one `.json` file only.** The loader reads every `.json` file as a manifest.
 
 5. Before you use a game API, query the name first. Do not work from memory. Run `inspect_game_api action=search target=<substring>`, then read the source with `action=decompile target=<full name>`. The wiki gives the shape of the code. It does not prove a type or a member name.
+
+   For a whole-tree question ("who calls X"), use `inspect_game_code`: `action=search target=<substring>` returns `file:line`, `action=type target=<name>` returns one file, and `action=body target=<name> member=<member>` returns only that member (overloads included). The tree is `~/.gamer-agent-pi/decompiled/sts2-mod-repo/` and covers `sts2` and `baselib`. To add another assembly, edit `decompile.json` and run `action=dump`. Nested types live inside the enclosing type's file, and compiler-generated `<>` types are not exported, so do not grep for those names.
 6. Compile and validate: `validate_mod modDir=your_mods/<your name>`.
 
 ## 3. Acceptance
