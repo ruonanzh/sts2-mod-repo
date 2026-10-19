@@ -8,3 +8,6 @@ node_modules/
 .pi-mod.json
 # 依赖判定的测试用临时目录（中途崩掉时留下）
 .dep-check-*
+
+# 玩家写 mod 的输出区（被 mod-creator / validate_mod 使用），不入库
+your_mods/

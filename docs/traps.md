@@ -199,7 +199,7 @@ already happened once), and key names use `SnakeCaseLower`.
   must match the architecture of the current process (`managedDirFor` falls back to the right one
   automatically).
 
-## 13. `inspect_api` finds nothing, and that does not mean that nothing uses it
+## 13. `inspect_game_api` finds nothing, and that does not mean that nothing uses it
 
 **Symptom**: `action=search` for `GetCustomAttribute` returns `0 match(es)`, and the agent concludes
 from that result that "no code reads this attribute".
@@ -212,11 +212,13 @@ reference inside BaseLib. `search` never finds it.
 the game did not start (trap 14).
 
 **What to do instead**: To find a name, use `action=search`. To decide **whether any code uses
-it**, read that class with `action=source` and read the member that calls it. A 0 hit from
+it**, read that class with `action=decompile` and follow the member that calls it. A 0 hit from
 `search` proves only that nothing declares it.
 
-The names `decompile` and `il` belong to the `api-probe` command line, not to `inspect_api`. The
-tool has three actions only: `search`, `members`, and `source`.
+`inspect_game_api` has five actions: `search`, `members`, `decompile`, `il`, and `strings` (`source`
+was the old name of `decompile`). All five are a pass-through to the `api-probe` command line. If a
+lookup misses, try the other assembly with `dll=game` or `dll=baselib` before you decide that the type
+does not exist.
 
 ## 14. `[Pool]` is absent: the game does not start, and the error is not in the mod loading stage
 
@@ -288,9 +290,9 @@ the other 10 alone.
 
 ## 16. A BETA status card appears where a mod card used to be
 
-**Symptom**: the player removed or disabled a mod, loaded an old run, and the deck holds a status
-card with BETA art. Its text says the card was removed in a recent update, it draws a card, it
-removes itself from the deck, and it exhausts. The deck has one more card than it should.
+**Symptom**: the player deleted or disabled a mod, loaded an old run, and the deck holds a status
+card with BETA art. Its own text says the game deleted the card in a recent update, it draws a card,
+it deletes itself from the deck, and it exhausts. The deck has one more card than it should.
 
 **Cause**: this is the game's fallback, not corruption. A run save stores card ids as strings. When
 a mod is gone, its id resolves to nothing, and the save path deliberately substitutes a placeholder:

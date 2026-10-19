@@ -24,9 +24,9 @@ dotnet run --project tools/api-probe -- \
 - `--dll`：**必填**。给 DLL 名（不带 `.dll`）、逗号分隔多个、**通配**（`MyGame.*`、`Unity*.dll`）、绝对路径，
   或 `*`（`--managed` 下所有**非框架** DLL）。
   本探针**不自带默认值**：它不得知道任何具体游戏的程序集名（本文件会被复制到别的游戏仓）。
-  `agent` 侧的 `inspect_api` 按这个仓库 `mod-repo.json` 的 `compile.references` 与 `compile.packages` 拼出这串。
+  `agent` 侧的 `inspect_game_api` 按这个仓库 `mod-repo.json` 的 `compile.references` 与 `compile.packages` 拼出这串。
 - **`*` 很宽**：它是"非框架"，会把游戏目录下的第三方插件（DOTween / Odin / UniTask 这类）一起扫。
-  想只扫游戏自己的程序集，用通配（例如 `--dll 'MyGame.*,MyGame.Data'`）；默认值由 `inspect_api` 按 `mod-repo.json` 的 `compile.references` 拼出来。
+  想只扫游戏自己的程序集，用通配（例如 `--dll 'MyGame.*,MyGame.Data'`）；默认值由 `inspect_game_api` 按 `mod-repo.json` 的 `compile.references` 拼出来。
 
 **`--managed` 是程序集解析根，不只是"去哪找 dll"**：它的作用是 `UniversalAssemblyResolver` 的搜索根，
 基类与依赖类型都从这里解析。若目标程序集**不在**该目录（例如来自 NuGet 缓存），正确写法是
@@ -74,7 +74,7 @@ dotnet run --project tools/api-probe -- \
 **字节一致**，不要改。本文件（README）有 4 处仓库本地化，上游同步后需要重新套用：
 
 1. 用法行里的 `--managed` 示例：本游戏的数据目录叫 `data_sts2_<平台>_<架构>`，没有 `Managed` 这一层。
-2. 提到 agent 侧工具名：本仓叫 `inspect_api`（上游叫 `inspect_game_api`）。
+2. 提到 agent 侧工具名：本仓叫 `inspect_game_api`（上游叫 `inspect_game_api`）。
 3. 提到契约文件名：本仓是 `mod-repo.json`（上游是 `game.json`）。
 4. 解析根示例同上。
 

@@ -23,7 +23,7 @@ Do the four steps in order. Go to the next step only after you see PASS.
 
 1. Run `check_runtime` with no arguments. It requires the .NET 9 SDK. If it returns FAIL, run `install_runtime` for the install guide, then run `check_runtime` again after the install.
    Why 9: the game uses `net9.0`, and SDK 8 reports `NETSDK1045` at compile time. Source: `compile.sdkMajor` in `mod-repo.json`, and a local measurement.
-   The same step also **builds the API probe that ships with this repository** (`tools/api-probe`). The decompiler is the bundled `ICSharpCode.Decompiler.dll` (see `THIRD_PARTY_LICENSES.md`). The csproj holds zero PackageReference, so this build **needs no network**. If the probe is not built, `inspect_api` behaves as if the tool were broken.
+   The same step also **builds the API probe that ships with this repository** (`tools/api-probe`). The decompiler is the bundled `ICSharpCode.Decompiler.dll` (see `THIRD_PARTY_LICENSES.md`). The csproj holds zero PackageReference, so this build **needs no network**. If the probe is not built, `inspect_game_api` behaves as if the tool were broken.
 2. Run `try_set_game_dir` with no arguments. It does three things: it finds the game directory, it derives the mod directory and the data directory, and it writes them into `.gamer-agent.local.json`.
 3. Run `check_game_paths` with no arguments. It only checks the paths recorded in the previous step, and it writes nothing. The workspace is ready only when all of them return PASS.
 4. Only when you need to compile: check that `validate_mod` runs (see mod-creator).
@@ -47,4 +47,4 @@ On macOS, modInstallDir looks like `.../SlayTheSpire2.app/Contents/MacOS/mods`. 
 | `try_set_game_dir` warns that the mod directory does not exist yet | The game never creates its own mods directory, and a machine that has never had a mod does not have it | Normal. `install_mod` creates it on the first install and says so. `check_game_paths` does not check existence, so it never reports this. |
 | `check_game_paths` reports that the Workshop directory is not recorded | The player subscribes to no mod | Normal. It is an optional reference path. It does not affect mod creation. |
 | The paths return PASS, but the game does not show the mod | The master load switch is off | See the Acceptance section of mod-installer. |
-| The line `API probe built` does not appear | The `tools/api-probe` build failed | The tool writes a WARN and gives the first error line. `inspect_api` is not usable then, but compilation and installation are not affected. |
+| The line `API probe built` does not appear | The `tools/api-probe` build failed | The tool writes a WARN and gives the first error line. `inspect_game_api` is not usable then, but compilation and installation are not affected. |

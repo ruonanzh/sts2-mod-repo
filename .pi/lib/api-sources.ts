@@ -1,5 +1,5 @@
 /**
- * 可查的程序集清单（**共享**：inspect_api 用它；validate_mod 将来也能用它判断
+ * 可查的程序集清单（**共享**：inspect_game_api 用它；validate_mod 将来也能用它判断
  * 「你引用了 BaseLib 却没在 manifest 里声明依赖」）。
  *
  * 两类来源，路径规则完全不同：

@@ -8,7 +8,7 @@ The DLL files that the game ships are `sts2.dll` and `0Harmony.dll`. They are **
 
 | File | Component | Version | License | Purpose | Shipped with the mod |
 |---|---|---|---|---|---|
-| `tools/api-probe/lib/ICSharpCode.Decompiler.dll` | [ICSharpCode.Decompiler](https://github.com/icsharpcode/ILSpy) (ILSpy) | **11.1.0.9782** | MIT | Decompiles C#. All the `search`, `members`, and `source` actions of `inspect_api` read the assembly through it. The conclusions in `docs/` also come from it. | No (maintainer tool) |
+| `tools/api-probe/lib/ICSharpCode.Decompiler.dll` | [ICSharpCode.Decompiler](https://github.com/icsharpcode/ILSpy) (ILSpy) | **11.1.0.9782** | MIT | Decompiles C#. All the `search`, `members`, and `source` actions of `inspect_game_api` read the assembly through it. The conclusions in `docs/` also come from it. | No (maintainer tool) |
 | `tools/api-probe/lib/System.Reflection.Metadata.dll` | System.Reflection.Metadata | **9.0.0.0** | MIT | A dependency of the component above | No |
 | `tools/api-probe/lib/System.Collections.Immutable.dll` | System.Collections.Immutable | **9.0.0.0** | MIT | A dependency of the component above | No |
 | `vendor/baselib/BaseLib.dll` | [BaseLib](https://github.com/Alchyr/BaseLib-StS2) (Alchyr) | **3.4.7** | MIT | The runtime dependency of a content mod. `install_mod` installs it into the mods directory of the game only when the player has **no copy at all**. | **Yes** (loaded at runtime) |

@@ -67,7 +67,7 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
 
    **The directory must hold one `.json` file only.** The loader reads every `.json` file as a manifest.
 
-5. Before you use a game API, query the name first. Do not work from memory. Run `inspect_api action=search query=<substring>`, then read the source with `action=source typeName=<full name>`. The wiki gives the shape of the code. It does not prove a type or a member name.
+5. Before you use a game API, query the name first. Do not work from memory. Run `inspect_game_api action=search target=<substring>`, then read the source with `action=decompile target=<full name>`. The wiki gives the shape of the code. It does not prove a type or a member name.
 6. Compile and validate: `validate_mod modDir=your_mods/<your name>`.
 
 ## 3. Acceptance
@@ -87,4 +87,4 @@ description: 'Use when the player wants to make a mod, add a piece of gameplay, 
 | `dll looks like an empty stub` | The csproj points the output directory at the project root. The SDK then excludes the source files. | Delete the custom `OutputPath`. Use the default `bin/Release`. |
 | `NETSDK1045` | The SDK is older than 9 | See setup-workspace. |
 | `min_game_version is X but the installed game is Y` | The manifest version is higher than the local game | Change it to a version no higher than the local one. |
-| The build reports a type it cannot find | The type name is wrong, or the assembly is not referenced | Query the real name with `inspect_api`. The reference list is `compile.references` in `mod-repo.json`. |
+| The build reports a type it cannot find | The type name is wrong, or the assembly is not referenced | Query the real name with `inspect_game_api`. The reference list is `compile.references` in `mod-repo.json`. |

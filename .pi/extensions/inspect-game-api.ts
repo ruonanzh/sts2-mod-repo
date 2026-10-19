@@ -7,7 +7,8 @@ import { managedDirFor, readGameConfig, readModRepoConfig, readState } from "../
 import { resolveApiSources, type ApiSource } from "../lib/api-sources";
 
 /**
- * inspect_api -- find the exact name of a type or member, then read its C#.
+ * inspect_game_api -- find the exact name of a type or member, then read its C#, its IL,
+ * or the string literals around it. The surface matches the sibling game repositories.
  *
  * The API a mod codes against spans more than one assembly. For Slay the Spire 2 a card
  * inherits BaseLib's `CustomCardModel`, whose base is the game's `CardModel`, so half the
@@ -30,12 +31,12 @@ import { resolveApiSources, type ApiSource } from "../lib/api-sources";
 const PROBE_DIR = join("tools", "api-probe");
 const PROBE_DLL = join("bin", "Release", "net8.0", "api-probe.dll");
 
-/** Which api-probe action each tool action maps to. */
-const ACTION_MAP: Record<string, string> = {
-  search: "search",
-  source: "decompile",
-  members: "members",
-};
+/**
+ * The five actions, identical to `inspect_game_api` in the other game repositories so an agent
+ * does not have to relearn the surface. The names are also the `api-probe` command line's names,
+ * except that the probe spells nothing differently: this is a pass-through.
+ */
+const ACTIONS = new Set(["search", "members", "decompile", "il", "strings"]);
 
 interface ProbeRun {
   source: ApiSource;
@@ -49,70 +50,78 @@ function clip(text: string, max: number): string {
 
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
-    name: "inspect_api",
+    name: "inspect_game_api",
     label: "Inspect API",
     description:
-      "Read the exact type and member names and the C# behind them, across every assembly the repository declares: the game (sts2.dll) and its standard framework (BaseLib.dll). Actions: search finds types and members whose name contains the query, members lists one type's base chain and full member signatures, source decompiles one type (or one member) to C#. Results are tagged with the assembly they came from. Use it before writing code that touches a game or BaseLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It reads the assemblies on disk and never loads or runs the game.",
+      "Read the exact type and member names, the C#, the IL, and the string literals of every assembly the repository declares: the game (sts2.dll) and its standard framework (BaseLib.dll). The five actions are search, members, decompile, il, and strings. search finds types and members whose name contains the target. members lists one type's members and its base chain. decompile turns one type or member into C#. il turns one type or method into IL. strings lists string literals. Results are tagged with the assembly they came from. Use it before writing code that touches a game or BaseLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It reads the assemblies on disk and never loads or runs the game.",
     promptSnippet: "Look up exact type and member names across the game and BaseLib before writing mod code",
     promptGuidelines: [
-      "Call inspect_api before you write code that touches a game or BaseLib type. Do not guess names; the two assemblies carry different halves of what a card needs.",
+      "Call inspect_game_api before you write code that touches a game or BaseLib type. Do not guess names. The two assemblies carry different halves of what a card needs.",
       "Use action=search with a short substring. It matches both type names and member names, so searching for a method such as PortraitPath works and tells you which type owns it.",
-      "Use action=members to see a type's base chain. A BaseLib type derives from a game type, so a hit tagged baselib almost always means sts2.dll is needed too; members shows this directly.",
+      "Use action=members to see a type's base chain. A BaseLib type derives from a game type, so a hit tagged baselib almost always means sts2.dll is needed too. members shows this directly.",
       "A hit tagged baselib also means the mod must reference BaseLib and declare it in the manifest dependencies.",
-      "When you learn something this way, write the fact and the query you used into docs/, so the next session does not repeat it.",
+      "A type can sit in either assembly. If a lookup misses, try the other one with dll=game or dll=baselib before you decide the type does not exist. A miss from search never proves that nothing uses a name; that needs a call-site, which is what the decompiled dump is for.",
+      "When you learn something this way, write the fact and the target you used into docs/, so the next session does not repeat it.",
     ],
     parameters: Type.Object({
-      action: Type.String({
-        description: 'One of "search", "members", or "source".',
-      }),
-      query: Type.Optional(
-        Type.String({
-          description: 'For action=search: a substring of a type or member name, for example "CustomCard" or "PortraitPath".',
-        }),
+      action: Type.Union(
+        [
+          Type.Literal("search"),
+          Type.Literal("members"),
+          Type.Literal("decompile"),
+          Type.Literal("il"),
+          Type.Literal("strings"),
+        ],
+        {
+          description:
+            "search: find types or members by name. members: list a type's members and its base chain. decompile: a type or member to C#. il: a type or method to IL. strings: string literals in an assembly.",
+        },
       ),
-      typeName: Type.Optional(
+      target: Type.Optional(
         Type.String({
           description:
-            'For action=members or action=source: the full type name, for example "MegaCrit.Sts2.Core.Models.CardModel" or "BaseLib.Abstracts.CustomCardModel".',
+            'A full type name such as "MegaCrit.Sts2.Core.Models.CardModel" or "BaseLib.Abstracts.CustomCardModel", or a substring for action=search such as "CustomCard".',
         }),
       ),
       member: Type.Optional(
         Type.String({
-          description: "For action=source: narrow the output to one member, for example a method name.",
+          description: "For action=decompile or action=il: narrow the output to one member.",
         }),
       ),
-      assembly: Type.Optional(
+      dll: Type.Optional(
         Type.String({
           description:
-            'Restrict to one label: "game" or "baselib". Default "all", which is what you normally want because a card needs names from both.',
+            'Which assembly to read: "game", "baselib", the assembly name such as "sts2", or "all". Default "all", which is what you normally want because a card needs names from both.',
         }),
       ),
       limit: Type.Optional(Type.Number({ description: "Maximum output lines. Default 400." })),
+      offset: Type.Optional(
+        Type.Number({ description: "Skip the first N matches, to page a large search or strings result. Default 0." }),
+      ),
     }),
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const repoRoot = ctx.cwd;
-      const action = ACTION_MAP[params.action ?? ""];
-      if (!action) {
+      const action = String(params.action ?? "");
+      if (!ACTIONS.has(action)) {
         return {
           content: [
             {
               type: "text",
-              text: `FAIL: unknown action ${JSON.stringify(params.action)}.\nNEXT: use one of search, members, or source.`,
+              text: `FAIL: unknown action ${JSON.stringify(params.action)}.\nNEXT: use one of search, members, decompile, il, or strings.`,
             },
           ],
           details: { ok: false, reason: "BAD_ACTION" },
         };
       }
 
-      const target = (params.action === "search" ? params.query : params.typeName)?.trim() ?? "";
+      const target = (params.target ?? "").trim();
       if (!target) {
-        const need = params.action === "search" ? "query" : "typeName";
         return {
           content: [
             {
               type: "text",
-              text: `FAIL: action=${params.action} needs ${need}.\nNEXT: ${
-                params.action === "search"
+              text: `FAIL: action=${action} needs target.\nNEXT: ${
+                action === "search"
                   ? "pass a short substring, for example \"CustomCard\"."
                   : "run action=search first to get the exact type name."
               }`,
@@ -172,8 +181,15 @@ export default function (pi: ExtensionAPI) {
       }
 
       const { sources, notes } = resolveApiSources({ managedDir: managed, references, packages });
-      const wanted = (params.assembly ?? "all").trim().toLowerCase();
-      const active = wanted === "all" ? sources : sources.filter((s) => s.label === wanted);
+      // `dll` mirrors the other game repository: a label ("game", "baselib"), an assembly name
+      // ("sts2"), or "all". The label is ours; the assembly name is what the sibling tool calls it.
+      const wanted = (params.dll ?? "all").trim().toLowerCase();
+      const active =
+        wanted === "all"
+          ? sources
+          : sources.filter(
+              (s) => s.label === wanted || s.assembly.toLowerCase() === wanted.replace(/\.dll$/, ""),
+            );
 
       if (!active.length) {
         const gameMissing = !managed || !existsSync(managed);
@@ -222,6 +238,8 @@ export default function (pi: ExtensionAPI) {
           target,
         ];
         if (params.member) args.push("--member", params.member);
+        if (params.limit !== undefined) args.push("--limit", String(params.limit));
+        if (params.offset !== undefined) args.push("--offset", String(params.offset));
         try {
           const r = await runAsync(dotnet, args, {
             cwd: repoRoot,
@@ -288,8 +306,8 @@ export default function (pi: ExtensionAPI) {
 
       const footer: string[] = [];
       for (const n of notes) footer.push(n);
-      if (params.action === "search") {
-        footer.push("NEXT: action=members shows a type's base chain; action=source reads its C#.");
+      if (action === "search") {
+        footer.push("NEXT: action=members shows a type's base chain, and action=decompile reads its C#.");
       }
 
       return {

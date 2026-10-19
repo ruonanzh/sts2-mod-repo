@@ -52,7 +52,7 @@ The entry point is a `[ModInitializer("method name")]` attribute on a type. The 
 
 ## Hard rules
 
-- **Do not guess a class name or a field name.** Use `inspect_api` for the answer. `action=search` lists the real type names. `action=source` decompiles the code and reads the source. Add the fact you found to `docs/`, together with the search term.
+- **Do not guess a class name or a field name.** Use `inspect_game_api` for the answer. `action=search` lists the real type names. `action=decompile` reads the C# behind one type or member. Add the fact you found to `docs/`, together with the search term.
 - **Installed does not mean loaded.** The game holds a global switch in `settings.save`, `mod_settings.mods_enabled`. If that value is `false`, the game marks every mod `Disabled` and **reports no error**. `install_mod` reports this state. If the value is `false`, you must tell the player to switch it on.
 - **Do not write other files in the game directory.** Write only your own directory under the mods directory. Do not touch `settings.save`. Do not touch a `.pck`.
 - **One change, one validation.** After a change, the mod must compile and must load. State a reproducible validation, such as reading `godot.log`.

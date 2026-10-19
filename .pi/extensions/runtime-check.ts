@@ -24,7 +24,7 @@ export default function (pi: ExtensionAPI) {
     name: "check_runtime",
     label: "Check Runtime",
     description:
-      "Checks that the .NET SDK meets the minimum major version declared in mod-repo.json (compile.sdkMajor; Slay the Spire 2 needs 9 because the game targets net9.0). It also builds tools/api-probe, the vendored decompiler front end that inspect_api uses; that build needs no network and writes only inside the repository. It records the resolved dotnet path in .gamer-agent.local.json. It does not locate the game, and it does not report whether the game's mod loading switch is on; install_mod does that. Game and mod paths belong to check_game_paths, try_set_game_dir, and set_game_dir.",
+      "Checks that the .NET SDK meets the minimum major version declared in mod-repo.json (compile.sdkMajor; Slay the Spire 2 needs 9 because the game targets net9.0). It also builds tools/api-probe, the vendored decompiler front end that inspect_game_api uses; that build needs no network and writes only inside the repository. It records the resolved dotnet path in .gamer-agent.local.json. It does not locate the game, and it does not report whether the game's mod loading switch is on; install_mod does that. Game and mod paths belong to check_game_paths, try_set_game_dir, and set_game_dir.",
     promptSnippet: "Check the .NET SDK when compilation needs it or the player asks about setup",
     promptGuidelines: [
       "Use check_runtime when the SDK is needed for compilation, or when the player asks whether the environment is ready.",
@@ -60,7 +60,7 @@ export default function (pi: ExtensionAPI) {
       // 工具链就绪 = SDK 在 + 仓库自带的 API 探针能跑。
       // `tools/api-probe` 链接的是**随仓**的 ICSharpCode.Decompiler（见 THIRD_PARTY_LICENSES.md），
       // csproj 里零 PackageReference，所以这次构建**不需要联网**；bin/ 是 gitignored，
-      // 新 clone 里没有它，必须在第一次 check 时建出来 —— 否则 inspect_api 会表现得像「工具坏了」。
+      // 新 clone 里没有它，必须在第一次 check 时建出来 —— 否则 inspect_game_api 会表现得像「工具坏了」。
       // 构建失败不降级 SDK 的结论，只补一条 WARN：编译 mod 不依赖探针。
       let toolsNote = "";
       const probeCsproj = join(cwd, "tools", "api-probe", "api-probe.csproj");
@@ -77,7 +77,7 @@ export default function (pi: ExtensionAPI) {
           const first = String(err.stdout ?? err.stderr ?? err.message ?? "")
             .split("\n")
             .find((l) => l.trim()) ?? "";
-          toolsNote = ` WARN: building tools/api-probe failed (${first.trim()}); inspect_api will not work until it builds.`;
+          toolsNote = ` WARN: building tools/api-probe failed (${first.trim()}); inspect_game_api will not work until it builds.`;
         }
       }
 

@@ -44,4 +44,4 @@ the other.
 - The official BaseLib wiki has a verbatim snapshot in
   [`../reference/base-lib-wiki/`](../reference/base-lib-wiki/INDEX.md). Read that `INDEX.md` first,
   and pick the page from what the player needs. Its code samples are not copy-pasteable: check every
-  signature against the dump or `inspect_api`. The source commit and the version are in `SOURCE.md`.
+  signature against the dump or `inspect_game_api`. The source commit and the version are in `SOURCE.md`.

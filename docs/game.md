@@ -276,7 +276,7 @@ Two details make the in-code route silent when it is wrong:
   `version` field of `vendor/baselib/BaseLib.json`. An earlier revision of this page said `3.3.0+`,
   and that value is out of date.
 - **The verbatim snapshot of the official wiki is in `reference/base-lib-wiki/`.** Read that
-  `INDEX.md` first to find the page, then use `inspect_api` to find the real name.
+  `INDEX.md` first to find the page, then use `inspect_game_api` to find the real name.
 
 ## 7.1 Removing a mod does not break the save
 
@@ -311,7 +311,7 @@ Do not conclude from `ModelDb.GetById` that a missing model crashes a load. `Get
 
 ## 8. Limits when you resolve a name
 
-`inspect_api` reads both the `sts2.dll` of the **game** (6381 types) and the `BaseLib.dll` of
+`inspect_game_api` reads both the `sts2.dll` of the **game** (6381 types) and the `BaseLib.dll` of
 **BaseLib** (1015 types), and each result carries a `[game]` or `[baselib]` label. Therefore:
 
 - Every type of the game is available for a lookup and for decompilation.
@@ -321,4 +321,4 @@ Do not conclude from `ModelDb.GetById` that a missing model crashes a load. `Get
 - `sts2.xml` is a collection of `<summary>` comments only (19635 entries), and **a member with no
   comment is not in it**. `CardModel.PortraitPath` has no documentation, for example, so you must
   decompile the type to read it. To find a member name, always read the type source with
-  `action=source`.
+  `action=decompile`.

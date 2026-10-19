@@ -8,9 +8,9 @@ The pages in this directory are **verbatim snapshots**. Their source and version
 **There are two steps and you must not skip the first one.**
 
 1. **Find the page from what the player wants to do.** Read the table "Find a page by what you want to do" below. If a row matches, read that page. Read the pages that match only and do not read the whole set.
-2. **Then check the real names.** The class names, the method names, and the parameters in the wiki may differ from this version on your machine. Before you write code, always run `inspect_api`. Use `action=search` to find a type name, `action=members` to read a signature, and `action=source` to read the implementation.
+2. **Then check the real names.** The class names, the method names, and the parameters in the wiki may differ from this version on your machine. Before you write code, always run `inspect_game_api`. Use `action=search` to find a type name, `action=members` to read a signature, and `action=decompile` to read the implementation.
 
-**Why the wiki is not the only source**: the wiki addresses people who want to learn modding. It leaves out the differences between versions and some pages have code snippets without the preconditions. The rule of this repository is that we never guess a class name. The wiki gives a direction and `inspect_api` gives the fact.
+**Why the wiki is not the only source**: the wiki addresses people who want to learn modding. It leaves out the differences between versions and some pages have code snippets without the preconditions. The rule of this repository is that we never guess a class name. The wiki gives a direction and `inspect_game_api` gives the fact.
 
 **Do not invent what the wiki does not state.** Read the gap list below. The only source for those items is decompilation.
 
@@ -80,7 +80,7 @@ The pages in this directory are **verbatim snapshots**. Their source and version
 
 ## Gap list (only decompilation covers these items)
 
-These items are absent upstream or only half written. **Do not infer them from the wiki. Run `inspect_api action=source` instead.**
+These items are absent upstream or only half written. **Do not infer them from the wiki. Run `inspect_game_api action=decompile` instead.**
 
 | Gap | Current state | Where to look |
 |---|---|---|

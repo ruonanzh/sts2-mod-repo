@@ -24,7 +24,7 @@ v1 ships **no asset pack** (`compile.pck: false`). To add a `.pck`, you must fir
 | `check_runtime` | Whether the .NET 9 SDK is ready |
 | `try_set_game_dir` / `set_game_dir` / `check_game_paths` | Locate, record, and check three paths |
 | `validate_mod` | Validate the manifest, compile the code, and check the products |
-| `inspect_api` | Find a game type by name, then decompile it and read the source (do not guess class names) |
+| `inspect_game_api` | Find a game type by name, then decompile it and read the source (do not guess class names) |
 | `install_mod` | Copy the mod into the game's mods directory, then report the state of the mod loading switch |
 
 The paths and the criteria are in `.pi/lib/`. `mod-repo.json` holds constants only.
