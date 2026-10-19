@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "runtime": "mono",
+  "dump": {
+    "assemblies": ["sts2", "baselib"],
+    "paths": { "baselib": "vendor/baselib/BaseLib.dll" },
+    "skipNestedTypes": true,
+    "skipCompilerGenerated": true,
+    "budgetBytes": 25000000
+  }
+}
