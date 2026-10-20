@@ -2,7 +2,7 @@
 // through the product. It exists so that a single tool can be exercised from a shell
 // after a change, without starting a session.
 //
-// Run with: bun .pi/dev-harness.mjs <extension> [tool] [json-params]
+// Run with: bun scripts/dev-harness.mjs <extension> [tool] [json-params]
 // It bootstraps the two module stubs it needs into node_modules/ (gitignored), so a
 // fresh clone works without any install step.
 import { mkdirSync, writeFileSync } from "node:fs";

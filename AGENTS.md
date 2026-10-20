@@ -61,4 +61,4 @@ The entry point is a `[ModInitializer("method name")]` attribute on a type. The 
 
 ## For maintainers
 
-`.pi/dev-harness.mjs` can run a single tool without starting a session, which is useful for a local self-test after a change. It needs two stub packages in `node_modules/`, `typebox` and `@earendil-works/pi-coding-agent`. Those two do not go into the repository.
+`scripts/dev-harness.mjs` can run a single tool without starting a session, which is useful for a local self-test after a change. It lives in `scripts/` with the other maintainer checks, not in `.pi/`, because `.pi/` is what the product loads: extensions, criteria, and skills. It needs two stub packages in `node_modules/`, `typebox` and `@earendil-works/pi-coding-agent`. Those two do not go into the repository.
