@@ -1,9 +1,10 @@
 /**
- * 探针构建的共享 helper（`inspect_game_code` 用；`inspect_game_api` 自己管构建）。
+ * 判断"探针要不要重新构建"的 helper。只有一个调用方：`.pi/lib/decompile.ts`，也就是
+ * `inspect_game_code` 的 dump 路径。
  *
- * 两个工具都是"薄封装一个 vendored 的 C# 探针"：真正读 DLL / 读数据的是 `tools/*` 里的探针。
- * 这里只负责一件事：**判断要不要重新构建探针**（增量构建虽快，但每次 `dotnet build` 仍有
- * MSBuild 开销，没必要）。
+ * `inspect_game_api` 不经过这里：它直接运行 `tools/api-probe`，构建由 `check_runtime` 负责。
+ * 这里只管一件事：探针 DLL 是否比它的源码新。增量构建虽快，但每次 `dotnet build` 都有
+ * MSBuild 开销，没必要白跑。
  */
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
