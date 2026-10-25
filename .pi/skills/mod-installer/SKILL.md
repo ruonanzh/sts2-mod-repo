@@ -60,7 +60,7 @@ The mod must appear in Mod Settings. The save branch must contain `modded/profil
 
 ## 5. Check capability behavior
 
-Use the acceptance list from the capability SKILL. For a card, check registration, text, portrait, damage, and upgrade.
+Check the acceptance list from the capability SKILL. Verify the requested behavior, not only compilation or loading.
 
 Use `docs/traps.md` for disabled mods, missing runtime files, missing resources, normalized IDs, incomplete dumps, dependency versions, and duplicates.
 

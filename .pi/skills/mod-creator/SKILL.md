@@ -21,7 +21,13 @@ Do not invent a supported capability from a template name alone.
 
 ## 2. Read the capability procedure
 
-For a card, stop here and complete `.pi/skills/add-card/SKILL.md`. The remaining steps are for other mods.
+For a card, stop here and complete `.pi/skills/add-card/SKILL.md`.
+
+For a relic, stop here and complete `.pi/skills/add-relic/SKILL.md`.
+
+For a power, stop here and complete `.pi/skills/add-power/SKILL.md`.
+
+The remaining steps are for other mods.
 
 For another task, read `reference/ritsulib-wiki/INDEX.md`. Choose only the relevant upstream pages. Check the pinned API with `inspect_game_api` before writing code.
 
