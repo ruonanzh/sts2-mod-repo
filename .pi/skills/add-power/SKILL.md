@@ -19,9 +19,9 @@ description: 'Use when the player wants to add a combat power. Covers applicatio
 | English and Chinese text | Momentum and its Chinese translation |
 | Icon | One 8-bit RGB or RGBA PNG |
 
-Use `mod-page` before copying the reference when a design choice needs player agreement.
+Use `mod-page` before copying the reference when a design choice needs player agreement. An unmentioned applying-card starting-deck addition means no addition.
 
-Use `reference/example_power/` as the accepted reference.
+Use `reference/example_power/` as the accepted reference. For additional items in the same mod, reuse the existing project and add only new model code and assets.
 
 ## Steps
 
@@ -29,11 +29,12 @@ Use `reference/example_power/` as the accepted reference.
 
 2. Change the mod identity everywhere:
    - `<AssemblyName>` in the csproj.
-   - The namespace in `Entry.cs`.
+   - Every C# namespace and the `RegisterModAssembly` owner ID. The owner ID must equal the manifest `id`.
+   - Logger and Harmony IDs.
    - The manifest file name and `id`.
    - The resource root under `assets/<ModId>/`.
 
-3. Read `docs/ritsulib.md` before changing registration. Change `Momentum.cs`:
+3. Read `docs/ritsulib.md` before changing registration. Rename source files and classes as needed. Source file names do not affect loading. Keep references and localization IDs consistent. Change the power definition:
    - Set `Type`, `StackType`, and `AssetProfile`.
    - Implement the requested trigger with game APIs.
    - Use `Amount` when each stack changes the effect.
@@ -74,6 +75,8 @@ Use `reference/example_power/` as the accepted reference.
 
 - The power and its application source register exactly once.
 - The source applies the requested amount.
+- The requested character has the requested number of applying cards when a starting-deck addition is requested.
+- No starting-deck addition exists when the player did not request one.
 - The title and description render in English and Chinese.
 - The intended icon and stack count render correctly.
 - Each trigger produces the requested behavior.

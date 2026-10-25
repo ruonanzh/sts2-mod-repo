@@ -112,7 +112,11 @@ function localizationKeys(modDir: string, modId: string): { keys: string[]; badJ
     }
     for (const f of files) {
       try {
-        const obj = JSON.parse(readFileSync(join(root, lang, f), "utf8")) as Record<string, unknown>;
+        const obj = JSON.parse(readFileSync(join(root, lang, f), "utf8")) as unknown;
+        if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+          badJson.push(`${lang}/${f}`);
+          continue;
+        }
         for (const k of Object.keys(obj)) keys.push(k);
       } catch {
         badJson.push(`${lang}/${f}`);
@@ -127,7 +131,7 @@ export default function (pi: ExtensionAPI) {
     name: "validate_mod",
     label: "Validate Mod",
     description:
-      "Validates a Slay the Spire 2 mod directory and compiles it. Checks the manifest (single <id>.json, id equal to the file name, only the 10 loader keys), the project's AssemblyName, the min_game_version against the installed game, the configured RitsuLib dependency, and localization JSON, including RitsuLib model localization IDs. Then runs dotnet build, builds an optional PCK from assets/, and inspects the produced artifacts. The build writes output inside the mod directory. It does not edit source and does not test gameplay. Output text uses PASS, FAIL, or PARTIAL plus a NEXT line. Skipped compilation is PARTIAL, never PASS.",
+      "Validates a Slay the Spire 2 mod directory and compiles it. Checks the manifest (single <id>.json, id equal to the file name, only the 10 loader keys), the project's AssemblyName and RitsuLib registration owner ID, the min_game_version against the installed game, the configured RitsuLib dependency, and localization JSON, including RitsuLib model localization IDs. Then runs dotnet build, builds an optional PCK from assets/, and inspects the produced artifacts. The build writes output inside the mod directory. It does not edit source and does not test gameplay. Output text uses PASS, FAIL, or PARTIAL plus a NEXT line. Skipped compilation is PARTIAL, never PASS.",
     promptSnippet: "Validate and compile a Slay the Spire 2 mod before installing it",
     promptGuidelines: [
       "Run validate_mod on a mod directory after changing the manifest or C# source, and before install_mod. It compiles, so do not repeat the same dotnet build separately.",
@@ -211,6 +215,18 @@ export default function (pi: ExtensionAPI) {
           );
       }
 
+      const entryPath = join(modDir, "Entry.cs");
+      if (modId && existsSync(entryPath)) {
+        const entryText = readFileSync(entryPath, "utf8");
+        for (const match of entryText.matchAll(/RegisterModAssembly\(\s*"([^"]+)"/g)) {
+          if (match[1] !== modId) {
+            errors.push(
+              `RitsuLib registration owner "${match[1]}" does not match manifest id "${modId}". RegisterModAssembly must use the manifest id`,
+            );
+          }
+        }
+      }
+
       const wantsPck = manifestData.has_pck === true && cfg.compile?.pck === true;
       const assetsDir = join(csprojDir, "assets");
       if (wantsPck && !hasSourceFiles(assetsDir)) {
@@ -259,7 +275,7 @@ export default function (pi: ExtensionAPI) {
         for (const item of check.unresolved) warnings.push(`${item} was not checked because its ID expression is not static.`);
         if (check.status === "not-checked" && check.models.length === 0) {
           warnings.push(
-            `${label} localization IDs were not checked because no [Register${label}] classes were found. Content Pack registrations need a runtime localization check.`,
+            `${label} localization IDs were not checked because no supported registration was resolved. Content Pack or inherited registrations need a runtime localization check.`,
           );
         }
       }

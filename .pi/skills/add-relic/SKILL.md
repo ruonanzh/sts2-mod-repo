@@ -21,7 +21,7 @@ description: 'Use when the player wants to add a relic. Covers pools, triggers, 
 
 Use `mod-page` before copying the reference when a design choice needs player agreement. An unmentioned starting-relic addition means no addition.
 
-Use `reference/example_relic/` as the accepted reference.
+Use `reference/example_relic/` as the accepted reference. For additional items in the same mod, reuse the existing project and add only new model code and assets.
 
 ## Steps
 
@@ -31,11 +31,12 @@ Use `reference/example_relic/` as the accepted reference.
 
 2. Change the mod identity everywhere:
    - `<AssemblyName>` in the csproj.
-   - The namespace in `Entry.cs`.
+   - Every C# namespace and the `RegisterModAssembly` owner ID. The owner ID must equal the manifest `id`.
+   - Logger and Harmony IDs.
    - The manifest file name and `id`.
    - The resource root under `assets/<ModId>/`.
 
-3. Read `docs/ritsulib.md` before changing registration. Change `AegisShard.cs`:
+3. Read `docs/ritsulib.md` before changing registration. Rename the source file and class as needed. Source file names do not affect loading. Keep references and localization IDs consistent. Change the relic definition:
    - Set `FullPublicEntry` to a unique stable entry.
    - Set rarity, pool, `CanonicalVars`, and `AssetProfile`.
    - Implement the requested trigger with game APIs.

@@ -27,6 +27,8 @@ For a relic, stop here and complete `.pi/skills/add-relic/SKILL.md`.
 
 For a power, stop here and complete `.pi/skills/add-power/SKILL.md`.
 
+For a combined mod, apply each capability to its item in the same mod directory. Skip individual validation and installation. Validate once after all items, then install once.
+
 The remaining steps are for other mods.
 
 For another task, read `reference/ritsulib-wiki/INDEX.md`. Choose only the relevant upstream pages. Check the pinned API with `inspect_game_api` before writing code.

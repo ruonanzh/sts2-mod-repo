@@ -40,8 +40,12 @@ function attributePattern(kind: ModelKind): RegExp {
   return new RegExp(`\\[\\s*${name}(?:Attribute)?(?:\\s*\\(([^\\]]*)\\))?\\s*\\]\\s*(?:public|internal)?\\s*(?:sealed\\s+)?(?:partial\\s+)?class\\s+([A-Za-z_][A-Za-z0-9_]*)`, "g");
 }
 
+function hasNamedValue(args: string, name: string): boolean {
+  return new RegExp(`\\b${name}\\s*=`).test(args);
+}
+
 function namedValue(args: string, name: string): string | null {
-  return new RegExp(`\\b${name}\\s*=\\s*("(?:[^"\\\\]|\\\\.)*"|[A-Za-z_][A-Za-z0-9_]*)`).exec(args)?.[1] ?? null;
+  return new RegExp(`\\b${name}\\s*=\\s*("(?:[^"\\\\]|\\\\.)*"|[A-Za-z_][A-Za-z0-9_]*)\\s*(?=,|$)`).exec(args)?.[1] ?? null;
 }
 
 function constants(text: string): Map<string, string[]> {
@@ -59,16 +63,32 @@ export function checkModelLocalization(modDir: string, modId: string, kind: Mode
   const models: RegisteredModel[] = [];
   const unresolved: string[] = [];
   const invalid: string[] = [];
+  let possibleRegistration = false;
+  const attributeName = kind === "card" ? "RegisterCard" : kind === "relic" ? "RegisterRelic" : "RegisterPower";
+  const packMethod = kind === "card" ? "Card" : kind === "relic" ? "Relic" : "Power";
+  const templateName = kind === "card" ? "ModCardTemplate" : kind === "relic" ? "ModRelicTemplate" : "ModPowerTemplate";
   for (const file of sourceFiles(modDir)) {
     const text = readFileSync(file, "utf8");
+    if (new RegExp(`\\[\\s*${attributeName}`).test(text) && text.includes(templateName)) possibleRegistration = true;
+    if (new RegExp(`(?<!ModelDb)\\.${packMethod}<`).test(text)) possibleRegistration = true;
     const consts = constants(text);
     for (const match of text.matchAll(attributePattern(kind))) {
       const args = match[1] ?? "";
       const typeName = match[2];
+      const hasFull = hasNamedValue(args, "FullPublicEntry");
+      const hasStem = hasNamedValue(args, "StableEntryStem");
       const full = namedValue(args, "FullPublicEntry");
       const stem = namedValue(args, "StableEntryStem");
-      if (full && stem) {
+      if (hasFull && hasStem) {
         invalid.push(`${kind} ${typeName} sets both StableEntryStem and FullPublicEntry. RitsuLib rejects this combination.`);
+        continue;
+      }
+      if (hasFull && !full) {
+        unresolved.push(`${kind} ${typeName}: FullPublicEntry`);
+        continue;
+      }
+      if (hasStem && !stem) {
+        unresolved.push(`${kind} ${typeName}: StableEntryStem`);
         continue;
       }
       if (full) {
@@ -113,7 +133,9 @@ export function checkModelLocalization(modDir: string, modId: string, kind: Mode
       if (!existsSync(path)) continue;
       hasTable = true;
       try {
-        tables.push(JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>);
+        const parsed = JSON.parse(readFileSync(path, "utf8")) as unknown;
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) tables.push(parsed as Record<string, unknown>);
+        else invalidJson.push(`${entry.name}/${tableName}`);
       } catch {
         invalidJson.push(`${entry.name}/${tableName}`);
       }
@@ -124,7 +146,7 @@ export function checkModelLocalization(modDir: string, modId: string, kind: Mode
     !tables.some((table) => `${model.expectedId}.title` in table && `${model.expectedId}.description` in table));
   const status = missing.length > 0 || invalidJson.length > 0 || invalid.length > 0
     ? "failed"
-    : unresolved.length > 0 || (models.length === 0 && hasTable)
+    : unresolved.length > 0 || (models.length === 0 && (hasTable || possibleRegistration))
       ? "not-checked"
       : models.length === 0 ? "not-required" : "passed";
   return { status, models, missing, unresolved, invalid, invalidJson, hasTable };

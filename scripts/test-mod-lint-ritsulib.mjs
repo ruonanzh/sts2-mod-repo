@@ -24,7 +24,7 @@ function copyWithTsExtensions(from, to) {
   walk(to);
 }
 
-async function setup({ repoPck = true, modPck = true, assets = "valid", dependencies = "valid", stale = false, fixture = "ritsulib_probe", powerKeys = "valid", cardKeys = "valid", relicKeys = "valid", badAssetJson = false } = {}) {
+async function setup({ repoPck = true, modPck = true, assets = "valid", dependencies = "valid", stale = false, fixture = "ritsulib_probe", powerKeys = "valid", cardKeys = "valid", relicKeys = "valid", badAssetJson = false, ownerMismatch = false, inheritedPower = false, primitiveAssetJson = false } = {}) {
   const root = mkdtempSync(join(repoRoot, ".lint-ritsu-"));
   copyWithTsExtensions(join(repoRoot, ".pi"), join(root, ".pi"));
   cpSync(join(repoRoot, "tools", "pck-pack"), join(root, "tools", "pck-pack"), { recursive: true });
@@ -45,6 +45,37 @@ async function setup({ repoPck = true, modPck = true, assets = "valid", dependen
   if (dependencies === "missing-min") delete manifest.dependencies[0].min_version;
   if (dependencies === "malformed") manifest.dependencies[0].min_version = "not-a-version";
   writeFileSync(manifestPath, JSON.stringify(manifest));
+  if (ownerMismatch && fixture === "example_power") {
+    manifest.id = "RenamedPower";
+    const renamedManifest = join(modDir, "RenamedPower.json");
+    writeFileSync(renamedManifest, JSON.stringify(manifest));
+    rmSync(manifestPath);
+    const projectPath = join(modDir, "ExamplePower.csproj");
+    writeFileSync(projectPath, readFileSync(projectPath, "utf8").replace("<AssemblyName>ExamplePower</AssemblyName>", "<AssemblyName>RenamedPower</AssemblyName>"));
+    const oldAssets = join(modDir, "assets", "ExamplePower");
+    const newAssets = join(modDir, "assets", "RenamedPower");
+    cpSync(oldAssets, newAssets, { recursive: true });
+    rmSync(oldAssets, { recursive: true, force: true });
+    for (const lang of ["eng", "zhs"]) {
+      const path = join(newAssets, "localization", lang, "powers.json");
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll("EXAMPLE_POWER_POWER_MOMENTUM", "RENAMED_POWER_POWER_MOMENTUM"));
+    }
+  }
+  if (inheritedPower && fixture === "example_power") {
+    writeFileSync(join(modDir, "Momentum.cs"), `using MegaCrit.Sts2.Core.Entities.Powers;
+using STS2RitsuLib.Interop.AutoRegistration;
+using STS2RitsuLib.Scaffolding.Content;
+namespace ExamplePower;
+[RegisterPower]
+public abstract class BasePower : ModPowerTemplate
+{
+    public override PowerType Type => PowerType.Buff;
+    public override PowerStackType StackType => PowerStackType.Counter;
+}
+public sealed class Momentum : BasePower { }
+`);
+    for (const lang of ["eng", "zhs"]) rmSync(join(modDir, "assets", "ExamplePower", "localization", lang, "powers.json"));
+  }
   if (fixture === "example_power" && powerKeys !== "valid") {
     for (const lang of ["eng", "zhs"]) {
       const path = join(modDir, "assets", "ExamplePower", "localization", lang, "powers.json");
@@ -72,6 +103,9 @@ async function setup({ repoPck = true, modPck = true, assets = "valid", dependen
   }
   if (badAssetJson) {
     writeFileSync(join(modDir, "assets", "ExampleCard", "localization", "eng", "cards.json"), "{bad json");
+  }
+  if (primitiveAssetJson) {
+    writeFileSync(join(modDir, "assets", "ExampleCard", "localization", "eng", "cards.json"), "1");
   }
   if (assets === "missing") rmSync(join(modDir, "assets"), { recursive: true, force: true });
   if (assets === "empty") {
@@ -169,6 +203,15 @@ await caseRun("type-only Relic localization", { fixture: "example_relic", relicK
 });
 await caseRun("malformed assets localization", { fixture: "example_card", badAssetJson: true }, ({ text, details }) => {
   check("malformed JSON under assets is rejected", !details.ok && text.includes("assets/ExampleCard/localization/eng/cards.json is not valid JSON"), text);
+});
+await caseRun("primitive assets localization", { fixture: "example_card", primitiveAssetJson: true }, ({ text, details }) => {
+  check("primitive JSON root is rejected by validate_mod", !details.ok && text.includes("assets/ExampleCard/localization/eng/cards.json is not valid JSON"), text);
+});
+await caseRun("renamed Power with stale registration owner", { fixture: "example_power", ownerMismatch: true }, ({ text, details }) => {
+  check("stale RegisterModAssembly owner is rejected", !details.ok && details.compilation === "skipped" && text.includes('registration owner "ExamplePower" does not match manifest id "RenamedPower"'), text);
+});
+await caseRun("inherited Power without localization table", { fixture: "example_power", inheritedPower: true }, ({ text, details }) => {
+  check("inherited Power returns not-checked with a visible warning", details.ok && details.powerLocalization === "not-checked" && text.includes("Content Pack or inherited registrations need a runtime localization check"), text);
 });
 
 const failed = results.filter((result) => !result.ok);

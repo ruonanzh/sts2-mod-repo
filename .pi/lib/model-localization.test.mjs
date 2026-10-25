@@ -42,11 +42,26 @@ test("a type-only key fails with the computed full ID", () => {
   assert.deepEqual(result.missing, [{ typeName: "Momentum", expectedId: "EXAMPLE_POWER_POWER_MOMENTUM" }]);
 });
 
-test("Content Pack style registration is not claimed as checked", () => {
-  const { root, kind } = fixture({ source: "public sealed class Pack {}", tables: { eng: powerText } });
+test("Content Pack registration without a table is not claimed as checked", () => {
+  const { root, kind } = fixture({ source: "builder.Power<Momentum>();", tables: {} });
   const result = checkModelLocalization(root, "ExamplePower", kind);
   assert.equal(result.status, "not-checked");
-  assert.equal(result.hasTable, true);
+  assert.equal(result.hasTable, false);
+});
+
+test("inherited registration without a table is not claimed as checked", () => {
+  const { root, kind } = fixture({
+    source: "[RegisterPower]\npublic abstract class BasePower : ModPowerTemplate {}\npublic sealed class Momentum : BasePower {}",
+    tables: {},
+  });
+  const result = checkModelLocalization(root, "ExamplePower", kind);
+  assert.equal(result.status, "not-checked");
+});
+
+test("no registration and no table is not required", () => {
+  const { root, kind } = fixture({ source: "public sealed class Plain {}", tables: {} });
+  const result = checkModelLocalization(root, "ExamplePower", kind);
+  assert.equal(result.status, "not-required");
 });
 
 test("malformed model JSON fails instead of disappearing", () => {
@@ -54,6 +69,15 @@ test("malformed model JSON fails instead of disappearing", () => {
   const result = checkModelLocalization(root, "ExamplePower", kind);
   assert.equal(result.status, "failed");
   assert.deepEqual(result.invalidJson, ["eng/powers.json"]);
+});
+
+test("null and primitive roots fail without throwing", () => {
+  for (const value of [null, 1]) {
+    const { root, kind } = fixture({ tables: { eng: value } });
+    const result = checkModelLocalization(root, "ExamplePower", kind);
+    assert.equal(result.status, "failed");
+    assert.deepEqual(result.invalidJson, ["eng/powers.json"]);
+  }
 });
 
 test("a card resolves FullPublicEntry through its string constant", () => {
@@ -106,6 +130,54 @@ test("an unresolved entry constant is not claimed as checked", () => {
   const result = checkModelLocalization(root, "ExamplePower", kind);
   assert.equal(result.status, "not-checked");
   assert.equal(result.unresolved.length, 1);
+});
+
+test("nameof and concatenated entry expressions are not checked", () => {
+  for (const expression of ["nameof(AegisShard)", '"a" + "b"']) {
+    const { root, kind } = fixture({
+      kind: "card",
+      source: `[RegisterCard(typeof(IroncladCardPool), FullPublicEntry = ${expression})]\npublic sealed class AegisShard {}`,
+      tables: {},
+    });
+    const result = checkModelLocalization(root, "ExamplePower", kind);
+    assert.equal(result.status, "not-checked");
+    assert.equal(result.models.length, 0);
+    assert.equal(result.unresolved.length, 1);
+  }
+});
+
+test("three cards, one power, and two relics are checked independently", () => {
+  const source = [
+    "[RegisterCard(typeof(Pool))] public sealed class CardOne {}",
+    "[RegisterCard(typeof(Pool))] public sealed class CardTwo {}",
+    "[RegisterCard(typeof(Pool))] public sealed class CardThree {}",
+    "[RegisterPower] public sealed class Momentum {}",
+    "[RegisterRelic(typeof(Pool))] public sealed class RelicOne {}",
+    "[RegisterRelic(typeof(Pool))] public sealed class RelicTwo {}",
+  ].join("\n");
+  const entries = (kind, names) => Object.fromEntries(names.flatMap((name) => [
+    [`EXAMPLE_POWER_${kind.toUpperCase()}_${name}.title`, name],
+    [`EXAMPLE_POWER_${kind.toUpperCase()}_${name}.description`, "Text"],
+  ]));
+  const { root } = fixture({ source, tables: {} });
+  const base = join(root, "assets", "ExamplePower", "localization", "eng");
+  mkdirSync(base, { recursive: true });
+  const tables = {
+    "cards.json": entries("card", ["CARD_ONE", "CARD_TWO", "CARD_THREE"]),
+    "powers.json": entries("power", ["MOMENTUM"]),
+    "relics.json": entries("relic", ["RELIC_ONE", "RELIC_TWO"]),
+  };
+  for (const [file, table] of Object.entries(tables)) writeFileSync(join(base, file), JSON.stringify(table));
+  for (const [kind, count] of [["card", 3], ["power", 1], ["relic", 2]]) {
+    const result = checkModelLocalization(root, "ExamplePower", kind);
+    assert.equal(result.status, "passed");
+    assert.equal(result.models.length, count);
+  }
+  delete tables["cards.json"]["EXAMPLE_POWER_CARD_CARD_TWO.description"];
+  writeFileSync(join(base, "cards.json"), JSON.stringify(tables["cards.json"]));
+  const missing = checkModelLocalization(root, "ExamplePower", "card");
+  assert.equal(missing.status, "failed");
+  assert.equal(missing.missing[0].expectedId, "EXAMPLE_POWER_CARD_CARD_TWO");
 });
 
 test("a relic uses the same localization checks", () => {
