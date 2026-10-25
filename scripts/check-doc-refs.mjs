@@ -1,72 +1,47 @@
 #!/usr/bin/env node
 /**
- * 文档引用自检 —— 收藏我们踩过的一类坑：
- *
- *  A. **markdown 链接**：`[..](x.md)` 按**文件相对路径**解析，必须存在。
- *     踩过的坑：`.pi/skills/<skill>/SKILL.md` 里写 `../../docs/mod-kit-api.md`。
- *     从 `.pi/skills/add-item/` 往上两级是 `.pi/`，于是解析成 `.pi/docs/mod-kit-api.md` ——
- *     这个文件不存在，正确写法是 `../../../docs/mod-kit-api.md`。同类错在 4 份 SKILL 里出现过 5 次，
- *     在 `editors/<name>/README.md` 里出现过 2 次（指向设计仓的文件）。
- *
- *  B. **仓库根相对的路径**（反引号里那种）：`docs/…`、`scripts/…`、`libs/…`、`.pi/…` 等开头、
- *     并且带扩展名的，按**仓库根**解析，存在才通过。
- *     本仓只有这一种约定（引用别的仓库时写那边的相对路径，但那种通常带 `../` 或仓库名），
- *     所以这一条误报很低。**代码块里不查**（命令与游戏路径不属于这个约定）。
- *
- * 为什么**不**查 `../` 开头的反引号路径：那是我方两种合法写法的交集区（见上），机械查会误报。
- *
- * 用法：node scripts/check-doc-refs.mjs   （exit 1 = 有问题）
+ * Check Markdown links and repository-root paths.
+ * Markdown links resolve from the containing file. Backtick paths resolve from the repository root.
+ * Code fences are excluded because commands and game paths use another convention.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
-/** 不查的目录：工作区（app 托管，内容不可控）、构建产物、依赖 */
 const SKIP_DIRS = new Set([".git", "node_modules", "your_mods", "bin", "obj"]);
-/**
- * 逐字居留的上游文档，**不查**。
- *
- * `reference/base-lib-wiki/**` 是从 Alchyr/BaseLib-Wiki 原样抓下来的（见那边的 `SOURCE.md`）。
- * 上游用 Jekyll 的 `{% link docs/... %}` 语法，本脚本按 markdown 相对路径解析，会全部判成坏链 ——
- * 而这些文件**不许改**（改了就没法跟上游 diff），所以只能整个目录跳过。
- * 索引由我们写的 `reference/base-lib-wiki/INDEX.md` 提供，那一个文件照常检查。
- */
-const SKIP_PATHS = ["reference/base-lib-wiki"];
+// Generated upstream pages can contain site-specific links. Check our INDEX.md only.
+const SKIP_PATHS = ["reference/ritsulib-wiki"];
 const isSkippedPath = (rel) => SKIP_PATHS.some((p) => rel === p || rel.startsWith(`${p}/`));
-/** 反引号路径里认得的仓库顶层目录 */
 const REPO_TOP_DIRS = ["docs", "scripts", "libs", "reference", "editors", "tools", ".pi", "templates"];
-/** 行内写明是别的仓库时，`docs/…` 这类路径按那边的仓库算，本仓不查 */
-const OTHER_REPO = /设计仓|desktop-gamer-agent-pi|duckov 仓|eu5 仓|pi-desktop/;
+const OTHER_REPO = /desktop-gamer-agent-pi|duckov|eu5-mod-repo|pi-desktop/;
 
 const problems = [];
 const files = [];
 (function walk(dir) {
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    if (e.isDirectory()) {
-      if (SKIP_DIRS.has(e.name)) continue;
-      walk(join(dir, e.name));
-    } else if (e.name.endsWith(".md")) {
-      const abs = join(dir, e.name);
-      // 上游快照整目录跳过，只留我们自己写的 INDEX.md
-      if (isSkippedPath(relative(root, abs)) && !abs.endsWith("base-lib-wiki/INDEX.md"))
-        continue;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) {
+      if (SKIP_DIRS.has(entry.name)) continue;
+      walk(join(dir, entry.name));
+    } else if (entry.name.endsWith(".md")) {
+      const abs = join(dir, entry.name);
+      if (isSkippedPath(relative(root, abs)) && !abs.endsWith("ritsulib-wiki/INDEX.md")) continue;
       files.push(abs);
     }
   }
 })(root);
 
-/** 把代码围栏（``` 与 ~~~）去掉，保留行数，免得规则 B 去查命令与示例 */
+/** Remove code fences while preserving line numbers. */
 function stripFences(text) {
   const out = [];
   let inFence = false;
   let marker = "";
   for (const line of text.split("\n")) {
-    const m = /^\s*(```+|~~~+)/.exec(line);
-    if (m) {
+    const match = /^\s*(```+|~~~+)/.exec(line);
+    if (match) {
       if (!inFence) {
         inFence = true;
-        marker = m[1][0];
-      } else if (m[1][0] === marker) {
+        marker = match[1][0];
+      } else if (match[1][0] === marker) {
         inFence = false;
       }
       out.push("");
@@ -77,43 +52,35 @@ function stripFences(text) {
   return out.join("\n");
 }
 
-for (const f of files) {
-  const text = readFileSync(f, "utf8");
-  const where = relative(root, f);
+for (const file of files) {
+  const text = readFileSync(file, "utf8");
+  const where = relative(root, file);
 
-  // A. markdown 链接
-  for (const m of text.matchAll(/\[[^\]]*\]\(([^)\s]+\.md)(#[^)]*)?\)/g)) {
-    const target = m[1];
+  for (const match of text.matchAll(/\[[^\]]*\]\(([^)\s]+\.md)(#[^)]*)?\)/g)) {
+    const target = match[1];
     if (/^(https?:|\/\/|mailto:)/.test(target)) continue;
-    if (!existsSync(resolve(dirname(f), target))) {
-      problems.push(`A 断链：${where} → ${target}（解析到 ${relative(root, resolve(dirname(f), target))}）`);
+    if (!existsSync(resolve(dirname(file), target))) {
+      const resolved = relative(root, resolve(dirname(file), target));
+      problems.push(`broken link: ${where} -> ${target} (resolved to ${resolved})`);
     }
   }
 
-  // B. 反引号里的仓库根相对路径
-  //    写别的仓库的文件时，行内会先写明是哪个仓库（例如「设计仓 `docs/…`」）—— 那种跳过，
-  //    否则本仓与别的仓库都用 `docs/` 开头，会互相误报。
-  const naked = stripFences(text);
-  const nakedLines = naked.split("\n");
+  const nakedLines = stripFences(text).split("\n");
   for (let i = 0; i < nakedLines.length; i++) {
     const line = nakedLines[i];
-    // 中文会折行，「设计仓」常在上一行末尾 —— 一起看
     if (OTHER_REPO.test(line) || OTHER_REPO.test(nakedLines[i - 1] ?? "")) continue;
-    for (const m of line.matchAll(/`([A-Za-z0-9_./-]+\.(?:md|mjs|py|cs|json|ini|ts|png|glb|jsonl))`/g)) {
-      const p = m[1];
-      if (p.includes("..")) continue; // 相对路径，另一种合法写法
-      const top = p.split("/")[0];
-      if (!REPO_TOP_DIRS.includes(top)) continue;
-      if (!existsSync(join(root, p))) {
-        problems.push(`B 路径不存在：${where} → \`${p}\``);
-      }
+    for (const match of line.matchAll(/`([A-Za-z0-9_./-]+\.(?:md|mjs|py|cs|json|ini|ts|png|glb|jsonl))`/g)) {
+      const path = match[1];
+      if (path.includes("..")) continue;
+      if (!REPO_TOP_DIRS.includes(path.split("/")[0])) continue;
+      if (!existsSync(join(root, path))) problems.push(`missing path: ${where} -> \`${path}\``);
     }
   }
 }
 
 if (problems.length) {
-  for (const p of problems) console.error("  ❌ " + p);
-  console.error(`  共 ${problems.length} 处`);
+  for (const problem of problems) console.error(`FAIL ${problem}`);
+  console.error(`${problems.length} documentation reference problem(s)`);
   process.exit(1);
 }
-console.log(`  ✅ 文档引用自检通过（${files.length} 个 md 文件；规则：markdown 链接可达 + 反引号里的仓库根路径存在）`);
+console.log(`PASS documentation references (${files.length} Markdown files)`);

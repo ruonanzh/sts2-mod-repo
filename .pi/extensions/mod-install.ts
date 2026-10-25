@@ -306,7 +306,7 @@ export default function (pi: ExtensionAPI) {
     name: "install_mod",
     label: "Install Mod",
     description:
-      "Copies a mod's runtime products into the Slay the Spire 2 mods directory that try_set_game_dir or set_game_dir recorded. Products are the manifest <id>.json and the assembly <id>.dll. On macOS the target is SlayTheSpire2.app/Contents/MacOS/mods/<dir>; on Windows it is <install>/mods/<dir>. Re-installing the same mod updates it in place. If another mod owns the target directory, install_mod uses <dir>_pimod and does not overwrite it. It reports whether the game's mod loading switch (mod_settings.mods_enabled) is on, because the game silently skips every mod while that switch is off. It does not compile and does not install SDKs.",
+      "Copies a mod's runtime products into the Slay the Spire 2 mods directory that try_set_game_dir or set_game_dir recorded. Products are the manifest <id>.json and the assembly <id>.dll. It also copies <id>.pck when has_pck is true. On macOS the target is SlayTheSpire2.app/Contents/MacOS/mods/<dir>; on Windows it is <install>/mods/<dir>. Re-installing the same mod updates it in place. If another mod owns the target directory, install_mod uses <dir>_pimod and does not overwrite it. It reports whether the game's mod loading switch (mod_settings.mods_enabled) is on, because the game silently skips every mod while that switch is off. It does not compile and does not install SDKs.",
     promptSnippet: "Install a validated mod into the game so the player can try it",
     promptGuidelines: [
       "Run install_mod only after validate_mod passes. install_mod copies files; it does not compile.",

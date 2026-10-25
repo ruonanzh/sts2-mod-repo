@@ -6,6 +6,8 @@ obj/
 .gamer-agent.local.json
 node_modules/
 .pi-mod.json
+# Decompiled game and framework output lives only under the product data root.
+decompiled/
 # 依赖判定的测试用临时目录（中途崩掉时留下）
 .dep-check-*
 

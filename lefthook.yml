@@ -10,7 +10,7 @@ pre-commit:
       run: node scripts/check-doc-refs.mjs
     prompt-standard-en:
       # The machine part of the English writing rules: semicolons, symbols, open lists, marketing
-      # words, the word folder, and sentences longer than 25 words. Rules: docs/prompt-standard.md.
+      # words, the word folder, and sentences longer than 25 words. Rules: scripts/prompt-standard.md.
       run: node scripts/check-prompt-standard-en.mjs
     mod-install-deps:
       # The rule behind install_mod: fill an empty gap, never overwrite. If it ever starts

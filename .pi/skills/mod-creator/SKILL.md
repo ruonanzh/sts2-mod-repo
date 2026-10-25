@@ -1,92 +1,68 @@
 ---
 name: mod-creator
-description: 'Use when the player wants to make a mod, add a piece of gameplay, change a card value, or add a new card. Covers the whole span from copying the sample to a successful compile. Not for: installing an existing mod into the game (see mod-installer), or when the environment is not ready (see setup-workspace).'
+description: 'Use when the player wants to make or change a mod. Covers requirement selection, implementation, and validation. Use add-card for a new card. Not for installation or environment setup.'
 ---
 
 # Make a mod
 
-**Goal**: Produce a mod directory that compiles and passes `validate_mod`. Gameplay is not the concern here, only correct structure.
+**Goal**: Produce a mod that passes `validate_mod`. Use a capability procedure for the content instead of repeating its rules here.
 
-## 1. Required input
+## 1. Confirm the request
 
-| Question | Default |
-|---|---|
-| What to make | You must get one clear sentence from the player, for example "add a 2-cost attack card" |
-| How to name the mod | The directory name the player gives. It sets the directory only, not the name in the game. |
-| Whether to use BaseLib | Use it when you add content: cards, relics, events, or characters. A patch-only mod may leave it out. |
+Get one clear sentence from the player. Identify the content type, gameplay behavior, languages, and assets.
 
-## 2. Steps
+Choose the reference:
 
-1. Read `reference/base-lib-wiki/INDEX.md` first. Compare the player's request with the table of
-   tasks, and read the one or two pages that it names. Do not page through the snapshot.
+- Use `reference/example_mod/` for an official-loader patch without RitsuLib.
+- Use `reference/example_card/` for a RitsuLib card.
+- For another capability, first check whether a working reference and capability SKILL exist.
 
-   The wiki is a snapshot of the upstream documentation. It shows how the author expects the code
-   to look, and it lists the topics that it does not cover at all. Step 5 queries the real names.
+Do not invent a supported capability from a template name alone.
 
-2. Copy a sample directory, then **change all three places that carry the name in one pass**.
-   Use `reference/example_mod/` for a mod that only patches the game. Use `reference/example_card/`
-   for a mod that adds content: that sample already carries `[Pool]`, the in-code localisation, and
-   the patch that puts the card into the starting deck.
+## 2. Read the capability procedure
 
-   ```
-   cp -r reference/example_mod/. your_mods/<your name>/      # or reference/example_card/
-   ```
+For a card, stop here and complete `.pi/skills/add-card/SKILL.md`. The remaining steps are for other mods.
 
-   The `/.` matters. `cp -r reference/example_mod your_mods/<name>` copies the directory
-   **into** the target when the target already exists, which gives
-   `your_mods/<name>/example_mod/`. `validate_mod` then reports no manifest.
+For another task, read `reference/ritsulib-wiki/INDEX.md`. Choose only the relevant upstream pages. Check the pinned API with `inspect_game_api` before writing code.
 
-   | Where to change | New value |
-   |---|---|
-   | `<AssemblyName>` in the `.csproj` | Your mod id |
-   | The `namespace` in `Entry.cs` | The same |
-   | The file name of `<name>.json` and its `id` field | The same |
+Read `docs/ritsulib.md` for framework rules and `docs/pck.md` for packaged resources.
 
-   The three places must match exactly. The loader reads the assembly as `<id>.dll`. If the file name and the id differ, it does not load the mod, and it reports no error.
+## 3. Create the mod
 
-3. Write or change the entry point. The entry method is static and takes no parameters:
+Copy the chosen reference into `your_mods/<mod name>/`. Change the assembly name, namespace, manifest file name, and manifest id together.
 
-   ```csharp
-   [ModInitializer(nameof(Init))]
-   public static class Entry
-   {
-       public static void Init() { /* your mod */ }
-   }
-   ```
+Keep exactly one top-level JSON file. Use `<id>.json`, `<id>.dll`, and `<id>.pck` when a PCK is needed.
 
-4. Write the manifest. The manifest accepts only these 10 keys: `id`, `name`, `author`, `description`, `version`, `has_pck`, `has_dll`, `dependencies`, `affects_gameplay`, `min_game_version`.
+Declare the runtime dependency when the project references RitsuLib:
 
-   | Key | The rule in this repository |
-   |---|---|
-   | `has_dll` | Must be `true` |
-   | `has_pck` | v1 must be `false`. If you write `true` and the build produces no `.pck`, the loader logs an error and loads the mod without its assets. The mod then looks installed but its resources are absent. |
-   | `version` | Must be `x.y.z`. If parsing fails, every mod that depends on it fails. |
-   | `min_game_version` | Write the local version (currently `0.107.1`). If you leave it out, you get a WARN only. |
-   | `affects_gameplay` | Write `true` when you change game logic, and `false` for appearance only. A wrong value causes a multiplayer desync. |
-   | `dependencies` | When you use BaseLib, write `[{"id":"BaseLib","min_version":"3.4.7"}]`. This is the version in `vendor/baselib`. A lower number works only when your code calls nothing new. |
+```json
+{ "id": "STS2-RitsuLib", "min_version": "0.6.10" }
+```
 
-   **The directory must hold one `.json` file only.** The loader reads every `.json` file as a manifest.
+Use `has_pck: true` only when the mod has packaged resources. Put source assets under `assets/`.
 
-5. Before you use a game API, query the name first. Do not work from memory. Run `inspect_game_api action=search target=<substring>`, then read the source with `action=decompile target=<full name>`. The wiki gives the shape of the code. It does not prove a type or a member name.
+## 4. Implement the behavior
 
-   For a whole-tree question ("who calls X"), use `inspect_game_code`: `action=search target=<substring>` returns `file:line`, `action=type target=<name>` returns one file, and `action=body target=<name> member=<member>` returns only that member (overloads included). The tree is `~/.gamer-agent-pi/decompiled/sts2-mod-repo/` and covers `sts2` and `baselib`. To read another assembly once, run `action=dump assemblies=<name>`. To keep it, add it to `.pi/lib/decompile.json`. Nested types live inside the enclosing type's file, and compiler-generated `<>` types are not exported, so do not grep for those names.
-6. Compile and validate: `validate_mod modDir=your_mods/<your name>`.
+Register the assembly with `ModTypeDiscoveryHub` when using attribute registration. Use attributes or one content pack, not both for the same model.
 
-## 3. Acceptance
+Check every unfamiliar type or member with `inspect_game_api`. Use `inspect_game_code` for call sites across the dump.
 
-- `validate_mod` returns PASS, and its text contains the word `compiled`.
-- A PARTIAL return **does not pass**. It means the build did not compile. Resolve the precondition that the NEXT line names, then run it again.
-- To prove that the artifact is really your code, run `strings -a <id>.dll | grep ModInitializerAttribute`. You must see output.
+Keep game-only patches separate from framework registration. Do not register the same model twice.
 
-## 4. Common errors
+## 5. Validate
 
-| Symptom | Cause | Action |
-|---|---|---|
-| `manifest file is X.json but its id is Y` | The file name and the id differ | Change both places together. Do not change only one. |
-| `found N .json files at the top` | The directory holds a second json file | Delete the extra one. A config file needs another extension or a subdirectory. |
-| `AssemblyName is "A" but the manifest id is "B"` | You did not change the csproj | Change `<AssemblyName>`. |
-| `missing <id>.dll after a successful build` | The output name and the id differ | The same as above. |
-| `dll looks like an empty stub` | The csproj points the output directory at the project root. The SDK then excludes the source files. | Delete the custom `OutputPath`. Use the default `bin/Release`. |
-| `NETSDK1045` | The SDK is older than 9 | See setup-workspace. |
-| `min_game_version is X but the installed game is Y` | The manifest version is higher than the local game | Change it to a version no higher than the local one. |
-| The build reports a type it cannot find | The type name is wrong, or the assembly is not referenced | Query the real name with `inspect_game_api`. The reference list is `compile.references` in `mod-repo.json`. |
+Run `validate_mod modDir=your_mods/<mod name>`.
+
+The tool compiles the assembly and builds a PCK when required. PARTIAL is not valid. Fix the named prerequisite and run it again.
+
+## Acceptance
+
+- `validate_mod` returns PASS and `compiled`.
+- The DLL exists and matches the manifest id.
+- A declared PCK exists and contains the intended resources.
+- The manifest declares every required runtime dependency.
+- Installation and gameplay remain for `mod-installer` and the capability acceptance steps.
+
+## Failure map
+
+Use `docs/traps.md` for disabled mods, missing runtime files, localization keys, raw PNG resources, normalized IDs, incomplete dumps, and missing PCK artifacts.

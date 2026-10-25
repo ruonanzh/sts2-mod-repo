@@ -27,3 +27,17 @@ for (const [key, path] of Object.entries(dump.dump.paths)) {
   assert.ok(existsSync(join(root, path)), `dump source exists: ${path}`);
 }
 console.log(`PASS: RitsuLib contract ${pkg.id}@${pkg.version}, ${pkg.assemblies.length} assemblies, vendor and dump agree`);
+
+const sdkMajor = config.compile.sdkMajor;
+const runtimeInstall = readFileSync(join(root, ".pi/extensions/runtime-install.ts"), "utf8");
+for (const text of [
+  `SDK >= ${sdkMajor}`,
+  `(dotnet.major ?? 0) >= ${sdkMajor}`,
+  `Install .NET SDK ${sdkMajor}.0`,
+  `-Channel ${sdkMajor}.0`,
+  `--channel ${sdkMajor}.0`,
+  `Microsoft.DotNet.SDK.${sdkMajor}`,
+]) {
+  assert.ok(runtimeInstall.includes(text), `runtime installer matches SDK ${sdkMajor}: ${text}`);
+}
+console.log(`PASS: runtime installer and validation use .NET SDK ${sdkMajor}`);

@@ -2,10 +2,11 @@
 /**
  * Machine part of the English writing standard.
  *
- * The rules are in `docs/prompt-standard.md`, section 3. This script checks only what a script can
+ * The rules are in `scripts/prompt-standard.md`. This script checks only what a script can
  * decide without judgement. Hedges, literals, and the term tables need a human read.
  *
  * What it checks:
+ *   0. No Han characters outside code examples.
  *   1. No semicolon in prose. A semicolon inside code, a literal, or a quoted log line is fine.
  *   2. No arrow and no symbol that carries meaning. `->` written as a word is a violation too.
  *   3. No `etc.`, no `and so on`, and no list that ends with `...`.
@@ -18,7 +19,7 @@
  * protection, because the failure mode is the same. One file drifts, the next file copies it, and
  * a few weeks later the repo has two words for one concept.
  *
- * The verbatim upstream wiki is skipped. Upstream has its own style and must not be edited.
+ * Generated upstream pages are skipped. Our index and source files are still checked.
  *
  * Usage: node scripts/check-prompt-standard-en.mjs [file ...]
  */
@@ -29,10 +30,10 @@ import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 /** Copied from upstream. Our own index and source files inside it are checked. */
-const SKIP_TREE = "reference/base-lib-wiki";
+const SKIP_TREE = "reference/ritsulib-wiki";
 const CHECKED_IN_SKIP_TREE = new Set(["INDEX.md", "SOURCE.md"]);
 
-const SKIP_DIRS = new Set([".git", "node_modules", "your_mods", "bin", "obj", "vendor/baselib"]);
+const SKIP_DIRS = new Set([".git", "node_modules", "your_mods", "bin", "obj", "vendor/ritsulib"]);
 
 const MAX_WORDS = 25;
 
@@ -73,7 +74,7 @@ const collect = () => {
 
   walk(join(root, "docs"));
   walk(join(root, ".pi", "skills"));
-  push(join(root, "vendor", "baselib", "README.md"));
+  push(join(root, "vendor", "ritsulib", "README.md"));
   push(join(root, SKIP_TREE, "INDEX.md"));
   push(join(root, SKIP_TREE, "SOURCE.md"));
   return [...new Set(out)];
@@ -120,6 +121,9 @@ for (const file of collect()) {
     const n = index + 1;
     const text = line.trim();
     if (!text) return;
+    if (/[\u3400-\u9fff]/u.test(text)) {
+      report(file, n, "english", "Use English prose. Localized strings belong inside code examples.");
+    }
     // Frontmatter and table rules are structure, not prose.
     if (/^[a-z_]+:\s/.test(text) && n <= 10) return;
 
@@ -172,5 +176,5 @@ if (!problems.length) {
 
 console.log(`FAIL  prompt-standard (English rules) has ${problems.length} problem(s):`);
 for (const p of problems) console.log(`  ${p.file}:${p.line}  [${p.rule}] ${p.detail}`);
-console.log("\nThe rules live in docs/prompt-standard.md, section 3.");
+console.log("\nThe rules live in scripts/prompt-standard.md.");
 process.exit(1);

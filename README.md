@@ -1,40 +1,43 @@
 # Slay the Spire 2 mod workspace
 
-You can write Slay the Spire 2 mods directly in this environment. Read `docs/` to learn the format. Write the mod under `your_mods/<mod name>/`. Validate it with `validate_mod`. Install it with `install_mod`.
+Create Slay the Spire 2 mods under `your_mods/`. Use `validate_mod` before `install_mod`.
 
-- `AGENTS.md` holds the structure and the environment facts.
-- `docs/game.md` holds the game mechanics, the manifest format, and the mod loading switch.
-- **`docs/traps.md` holds the trap list.** If something fails, read that page first. Almost every failure here reports no error.
+- `AGENTS.md` is the product-side workspace map.
+- `docs/INDEX.md` maps game, RitsuLib, PCK, decompilation, and failure documents.
+- `reference/ritsulib-wiki/INDEX.md` maps tasks to the English RitsuLib guide.
+- `reference/example_card/` is the accepted RitsuLib card example.
 
-## What kind of mod this is
+## Mod form
 
-`modType: godot-csharp`. The game is Godot 4.5.1 plus C# (`net9.0`). A mod produces:
+The repository uses `modType: godot-csharp`. A mod can produce:
 
+```text
+<id>.json
+<id>.dll
+<id>.pck    when has_pck is true
 ```
-<id>.json   the manifest (the file name must equal the id)
-<id>.dll    the assembly (the file name must equal the id)
-```
 
-v1 ships **no asset pack** (`compile.pck: false`). To add a `.pck`, you must first make the Godot export chain work.
+The PCK is optional. `tools/pck-pack` builds it from `assets/` without a Godot editor.
 
-## Tools
+## Agent tools
 
 | Tool | Purpose |
 |---|---|
-| `check_runtime` | Whether the .NET 9 SDK is ready |
-| `try_set_game_dir` / `set_game_dir` / `check_game_paths` | Locate, record, and check three paths |
-| `validate_mod` | Validate the manifest, compile the code, and check the products |
-| `inspect_game_api` | Find a game type by name, then decompile it and read the source (do not guess class names) |
-| `install_mod` | Copy the mod into the game's mods directory, then report the state of the mod loading switch |
+| `check_runtime` | Check the .NET 9 SDK and build the API probe |
+| `try_set_game_dir` / `set_game_dir` / `check_game_paths` | Locate, record, and check game paths |
+| `validate_mod` | Check the manifest and dependencies, compile, and build PCK |
+| `inspect_game_api` | Read exact game and RitsuLib types, members, C#, IL, and strings |
+| `inspect_game_code` | Search and read the managed-code dump |
+| `install_mod` | Install mod artifacts and missing dependencies |
 
-The paths and the criteria are in `.pi/lib/`. `mod-repo.json` holds constants only.
+Shared criteria live in `.pi/lib/`. `mod-repo.json` holds the static contract.
 
-## Third-party components
+## RitsuLib runtime
 
-`tools/` holds third-party binaries that the repository tracks. They are the decompiler that ships with this repository. The inventory, the versions, and the full MIT license text are in
-[`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md). These three files are byte-identical to upstream, and you must not change them.
+`vendor/ritsulib/` contains the official RitsuLib 0.6.10 runtime for game 0.107.1. Its `mod_manifest.json`, `shared/`, `compat/`, and `assets.zip` must remain intact.
 
-`vendor/baselib/` is a different case. **BaseLib** is a content mod that the game loads on the player's machine, and the other mods depend on it (MIT, see
-[`vendor/baselib/README.md`](vendor/baselib/README.md)). `install_mod` places it only when the player has
-**no copy at all**. If a copy already exists, `install_mod` leaves it alone. An install over that copy would overwrite the Workshop subscription and silently pin the version
-(item 9 of [`docs/traps.md`](docs/traps.md)).
+`install_mod` places the runtime only when no copy exists. It never replaces an existing dependency. See [`vendor/ritsulib/README.md`](vendor/ritsulib/README.md) and [`THIRD_PARTY_LICENSES.md`](THIRD_PARTY_LICENSES.md).
+
+## Capability guides
+
+Use `.pi/skills/mod-creator/` for the general workflow and `.pi/skills/add-card/` for the card workflow. More capability guides will be added only after their examples pass runtime acceptance.
