@@ -16,6 +16,10 @@ pre-commit:
       # The rule behind install_mod: fill an empty gap, never overwrite. If it ever starts
       # overwriting, this machine looks fine and the player silently keeps an old dependency.
       run: node scripts/test-mod-install-deps.mjs
+    pck-pack:
+      # The R0 lightweight packer must preserve PCK offsets and hashes, emit imported PNG pairs,
+      # stay deterministic, and reject bad source images without leaving a partial pack.
+      run: node scripts/test-pck-pack.mjs
     # If this game needs another check, for example probe options that must match the tool surface,
     # add a command here and put the script in scripts/. Do not reserve a hook for one game in a
     # skeleton repository.
