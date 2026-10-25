@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <AssemblyName>ExampleRelic</AssemblyName>
+    <RootNamespace>ExampleRelic</RootNamespace>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <RitsuLibAutoCopy>false</RitsuLibAutoCopy>
+    <ManagedDir Condition="'$(GAME_MANAGED_DIR)' != ''">$(GAME_MANAGED_DIR)</ManagedDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <Reference Include="sts2"><HintPath>$(ManagedDir)/sts2.dll</HintPath><Private>false</Private></Reference>
+    <Reference Include="0Harmony"><HintPath>$(ManagedDir)/0Harmony.dll</HintPath><Private>false</Private></Reference>
+    <PackageReference Include="STS2.RitsuLib.Compat.0.107.1" Version="0.6.10" PrivateAssets="all" ExcludeAssets="runtime" />
+  </ItemGroup>
+</Project>

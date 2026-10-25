@@ -6,6 +6,7 @@ import { runAsync } from "../lib/proc";
 import { probeDotnet } from "../lib/dotnet";
 import { managedDirFor, readGameConfig, readModRepoConfig, readState } from "../lib/game-paths";
 import { MANIFEST_KEYS, isParseableVersion, readManifest } from "../lib/mod-identity";
+import { checkModelLocalization, type ModelKind } from "../lib/model-localization";
 
 /**
  * validate_mod -- Slay the Spire 2 (godot-csharp).
@@ -85,10 +86,10 @@ function readAssemblyName(csprojPath: string): string | null {
 }
 
 /** Walk localization/<lang>/*.json and collect key names and malformed files. */
-function localizationKeys(modDir: string): { keys: string[]; badJson: string[] } {
+function localizationKeys(modDir: string, modId: string): { keys: string[]; badJson: string[] } {
   const keys: string[] = [];
   const badJson: string[] = [];
-  const root = join(modDir, "localization");
+  const root = join(modDir, "assets", modId, "localization");
   if (!existsSync(root)) return { keys, badJson };
   let langs: string[] = [];
   try {
@@ -126,7 +127,7 @@ export default function (pi: ExtensionAPI) {
     name: "validate_mod",
     label: "Validate Mod",
     description:
-      "Validates a Slay the Spire 2 mod directory and compiles it. Checks the manifest (single <id>.json, id equal to the file name, only the 10 loader keys), the project's AssemblyName, the min_game_version against the installed game, the configured RitsuLib dependency, and localization JSON. Then runs dotnet build, builds an optional PCK from assets/, and inspects the produced artifacts. The build writes output inside the mod directory. It does not edit source and does not test gameplay. Output text uses PASS, FAIL, or PARTIAL plus a NEXT line. Skipped compilation is PARTIAL, never PASS.",
+      "Validates a Slay the Spire 2 mod directory and compiles it. Checks the manifest (single <id>.json, id equal to the file name, only the 10 loader keys), the project's AssemblyName, the min_game_version against the installed game, the configured RitsuLib dependency, and localization JSON, including RitsuLib model localization IDs. Then runs dotnet build, builds an optional PCK from assets/, and inspects the produced artifacts. The build writes output inside the mod directory. It does not edit source and does not test gameplay. Output text uses PASS, FAIL, or PARTIAL plus a NEXT line. Skipped compilation is PARTIAL, never PASS.",
     promptSnippet: "Validate and compile a Slay the Spire 2 mod before installing it",
     promptGuidelines: [
       "Run validate_mod on a mod directory after changing the manifest or C# source, and before install_mod. It compiles, so do not repeat the same dotnet build separately.",
@@ -240,8 +241,28 @@ export default function (pi: ExtensionAPI) {
           }
         }
       }
-      const loc = localizationKeys(modDir);
-      for (const bad of loc.badJson) errors.push(`localization/${bad} is not valid JSON`);
+      const loc = localizationKeys(modDir, modId);
+      for (const bad of loc.badJson) errors.push(`assets/${modId}/localization/${bad} is not valid JSON`);
+      const localizationChecks = Object.fromEntries(
+        (["card", "relic", "power"] as ModelKind[]).map((kind) => [kind, checkModelLocalization(modDir, modId, kind)]),
+      ) as Record<ModelKind, ReturnType<typeof checkModelLocalization>>;
+      for (const [kind, check] of Object.entries(localizationChecks) as [ModelKind, (typeof localizationChecks)[ModelKind]][]) {
+        const label = kind[0].toUpperCase() + kind.slice(1);
+        for (const problem of check.invalid) errors.push(problem);
+        if (check.invalidJson.length === 0) {
+          for (const model of check.missing) {
+            errors.push(
+              `${label} ${model.typeName} expects localization ID ${model.expectedId}. No localization ${kind}s.json contains both the title and description for that ID. Use the full RitsuLib ID, not a type-only guess.`,
+            );
+          }
+        }
+        for (const item of check.unresolved) warnings.push(`${item} was not checked because its ID expression is not static.`);
+        if (check.status === "not-checked" && check.models.length === 0) {
+          warnings.push(
+            `${label} localization IDs were not checked because no [Register${label}] classes were found. Content Pack registrations need a runtime localization check.`,
+          );
+        }
+      }
 
       // 8. Compile. dotnet comes from check_runtime's cache; the game dir from the path tools.
       const state = readState(repoRoot);
@@ -400,7 +421,21 @@ export default function (pi: ExtensionAPI) {
 
       return {
         content: [{ type: "text", text: truncateLines(lines.join("\n")) }],
-        details: { ok, errors, warnings, compilation, pckBuild, modId, installedVersion },
+        details: {
+        ok,
+        errors,
+        warnings,
+        compilation,
+        pckBuild,
+        cardLocalization: localizationChecks.card.status,
+        relicLocalization: localizationChecks.relic.status,
+        powerLocalization: localizationChecks.power.status,
+        cardCount: localizationChecks.card.models.length,
+        relicCount: localizationChecks.relic.models.length,
+        powerCount: localizationChecks.power.models.length,
+        modId,
+        installedVersion,
+      },
       };
     },
   });

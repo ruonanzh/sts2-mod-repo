@@ -64,6 +64,10 @@ RitsuLib derives IDs from registration data. `FullPublicEntry` fixes the entry s
 
 Measured on 2026-10-25: `EXAMPLECARD-FOCUSEDSTRIKE` became `EXAMPLECARD_FOCUSEDSTRIKE`. The hyphen became an underscore. Existing saves that require the old ID need a dedicated migration layer. New RitsuLib content should use a new run unless that layer exists.
 
+Standalone models can use different registration metadata. `RegisterPower` in RitsuLib 0.6.10 does not support `FullPublicEntry`.
+
+Measured in `ExamplePower`: the type `Momentum` registered as `EXAMPLE_POWER_POWER_MOMENTUM`. Read the registration log for the full ID. Use that full ID in `powers.json`.
+
 ## Localization
 
 Game model text uses the game localization tables inside the consumer PCK:

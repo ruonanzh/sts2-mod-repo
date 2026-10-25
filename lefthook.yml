@@ -38,6 +38,12 @@ pre-commit:
     example-card:
       # The reference card must keep its RitsuLib package, assets, and full build contract.
       run: node scripts/test-example-card.mjs
+    example-relic:
+      # The reference relic must keep registration, packaged art, text, and combat-start behavior.
+      run: node scripts/test-example-relic.mjs
+    example-power:
+      # The reference power must keep stacking, application, art, text, and attack-triggered behavior.
+      run: node scripts/test-example-power.mjs
     pi-lib:
       # Package version selection, multi-assembly resolution, and dump readers share this suite.
       run: cd .pi/lib && bun test

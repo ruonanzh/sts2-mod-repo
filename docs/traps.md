@@ -17,6 +17,7 @@ Use this page when a mod installs or compiles but behaves differently from the r
 | A dependency does not install | [Vendor version](#9-the-vendor-version-is-not-accepted) |
 | A Workshop update never arrives | [Local duplicate](#10-a-local-copy-hides-the-workshop-copy) |
 | `zh_hans_cn.json` is missing in RitsuLib logs | [Upstream settings translation](#11-the-ritsulib-settings-translation-is-missing) |
+| A Power shows `powers.<id>.title` or `.description` | [Power localization ID](#12-a-power-shows-its-localization-key) |
 
 ## 1. The mod is disabled
 
@@ -127,3 +128,13 @@ Use this page when a mod installs or compiles but behaves differently from the r
 **Action**: Record it separately from consumer assets. Check the settings UI before assigning it to a mod.
 
 **Not proof**: This line does not mean the consumer PCK is missing its card localization.
+
+## 12. A Power shows its localization key
+
+**Check**: Compare the registration log ID with the keys in `powers.json`. Inspect the PCK. Fully restart after replacing it.
+
+**Cause**: `RegisterPower` does not accept `FullPublicEntry` in 0.6.10. A guessed type-only key can be wrong. An old game process can also keep the previous PCK.
+
+**Action**: Use the full registered ID. Rebuild, reinstall, and fully restart. If the key remains, check `ResourceLoader.Exists` and `LocTable.HasEntry`.
+
+**Not proof**: A working Power icon or effect does not prove its text is correct. A `powers.json` merge log does not prove that the entry exists.

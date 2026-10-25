@@ -1,0 +1,12 @@
+{
+  "id": "ExampleRelic",
+  "name": "Example Relic",
+  "author": "you",
+  "description": "A RitsuLib relic that grants 4 Block at the start of combat, with localization and packaged art.",
+  "version": "0.1.0",
+  "has_pck": true,
+  "has_dll": true,
+  "min_game_version": "0.107.1",
+  "dependencies": [{ "id": "STS2-RitsuLib", "min_version": "0.6.10" }],
+  "affects_gameplay": true
+}
