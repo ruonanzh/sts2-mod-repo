@@ -49,7 +49,7 @@ An installer session without a writable bound mod directory summarizes in text i
 
 ## Card design pages
 
-Show unresolved design choices before copying the reference. Include relevant cost, rarity, pool, effect, upgrade, and starting-deck values.
+Show unresolved design choices before implementation. Include relevant cost, rarity, pool, effect, upgrade, and starting-deck values.
 
 Include the proposed card art as an inline preview:
 

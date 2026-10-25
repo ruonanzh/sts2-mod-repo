@@ -17,6 +17,8 @@ Choose the reference:
 - Use `reference/example_card/` for a RitsuLib card.
 - For another capability, first check whether a working reference and capability SKILL exist.
 
+MUST study the chosen reference before implementation. Use it to understand a working project and its verified patterns.
+
 Do not invent a supported capability from a template name alone.
 
 ## 2. Read the capability procedure
@@ -39,7 +41,7 @@ Read `docs/ritsulib.md` for framework rules and `docs/pck.md` for packaged resou
 
 ## 3. Create the mod
 
-Copy the chosen reference into `your_mods/<mod name>/`. Change the assembly name, namespace, manifest file name, and manifest id together.
+Create a new project in `your_mods/<mod name>/` or adapt the chosen reference when useful. Change the assembly name, namespace, manifest file name, and manifest id together.
 
 Keep exactly one top-level JSON file. Use `<id>.json`, `<id>.dll`, and `<id>.pck` when a PCK is needed.
 
