@@ -13,7 +13,7 @@ pre-commit:
       # words, the word folder, and sentences longer than 25 words. Rules: scripts/prompt-standard.md.
       run: node scripts/check-prompt-standard-en.mjs
     mod-page:
-      # Keep page feedback path-specific, preserve inline art, and reject non-English editor text.
+      # Keep page feedback path-specific, preserve inline art, and check the Chinese editor UI.
       run: node scripts/test-mod-page.mjs
     mod-install-deps:
       # The rule behind install_mod: fill an empty gap, never overwrite. If it ever starts

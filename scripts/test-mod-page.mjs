@@ -14,7 +14,7 @@ assert.deepEqual(manifest.match, ["your_mods/*/.preview/*.modpage.html"]);
 const editor = read("editors/sts2_mod_page/editor.js");
 assert.ok(editor.includes('pagePath = typeof data.file?.path === "string"'));
 assert.ok(editor.includes("`/page-annotated ${JSON.stringify(pagePath)}`"));
-assert.ok(editor.includes("It will read the feedback and decide what to update."));
+assert.ok(editor.includes("已发送给 agent。它会读取反馈，再决定修改什么。"));
 
 const prompt = read(".pi/prompts/page-annotated.md");
 assert.ok(prompt.includes("${1:-not supplied}"));
@@ -26,11 +26,11 @@ assert.ok(pageSkill.includes("data:image/png;base64"));
 assert.ok(pageSkill.includes("An unmentioned starting-deck addition means no addition."));
 assert.ok(pageSkill.includes("without a writable bound mod directory summarizes in text"));
 
-for (const path of [
-  "editors/sts2_mod_page/index.html",
-  "editors/sts2_mod_page/editor.js",
-  "editors/sts2_mod_page/editor.css",
-]) {
-  assert.ok(!/[\u3400-\u9fff]/u.test(read(path)), `${path} contains non-English editor text`);
+const index = read("editors/sts2_mod_page/index.html");
+for (const text of ["刷新", "发送给 Agent", "批注", "替换"]) {
+  assert.ok(index.includes(text), `editor index contains Chinese control: ${text}`);
 }
-console.log("PASS: mod-page editor, path-specific feedback, inline art, and English UI contract");
+for (const text of ["条批注", "正在发送…", "已重新载入", "选中文字后可以标批注"]) {
+  assert.ok(editor.includes(text), `editor contains Chinese status: ${text}`);
+}
+console.log("PASS: mod-page editor, path-specific feedback, inline art, and Chinese UI contract");

@@ -237,24 +237,24 @@ function paintComments() {
 }
 
 function updateBar() {
-  count.textContent = comments.length === 0 ? "" : `${comments.length} comment${comments.length === 1 ? "" : "s"}`;
+  count.textContent = comments.length === 0 ? "" : `${comments.length} 条批注`;
   // Keep the button enabled for empty feedback unless the file is read-only.
   saveButton.disabled = !writable;
   removeButton.hidden = selectedId === null;
 }
 
 const SEND_ERROR_TEXT = {
-  AGENT_BUSY: "Saved to the page. The agent is busy. Try sending again shortly.",
-  NO_SESSION: "Saved to the page. Send /page-annotated in the conversation yourself.",
-  NOT_ALLOWED: "Saved to the page. This panel cannot notify the agent. Send /page-annotated yourself.",
-  SEND_FAILED: "Saved to the page. The notification failed. Send /page-annotated yourself.",
+  AGENT_BUSY: "已写入页面。agent 正在运行，稍等一下再点『发送给 Agent』。",
+  NO_SESSION: "已写入页面。这个面板没挂到会话上：到对话里发送 /page-annotated。",
+  NOT_ALLOWED: "已写入页面。这个面板不能通知 agent：到对话里发送 /page-annotated。",
+  SEND_FAILED: "已写入页面。消息没发出去：到对话里发送 /page-annotated。",
 };
 
 const SAVE_ERROR_TEXT = {
-  READ_ONLY: "This file is outside the mod and cannot be changed.",
-  WRITE_DENIED: "Only files under your_mods/ can be changed.",
-  CONFLICT: "The page changed on disk. Reopen it and add your feedback again.",
-  TOO_LARGE: "The page is too large to save.",
+  READ_ONLY: "这个文件在 mod 之外，不能写入。",
+  WRITE_DENIED: "只能写 your_mods/ 里的文件。",
+  CONFLICT: "页面已被改动。关掉再打开这一页，重新标。",
+  TOO_LARGE: "页面文件太大，写不下。",
 };
 
 /** Identify which occurrence of a repeated quote was selected. */
@@ -282,7 +282,7 @@ function addComment(kind, quote, text, occurrence) {
     ...(occurrence ? { occurrence } : {}),
   });
   paintComments();
-  say("Added. Select Send to Agent when you are ready.");
+  say("已添加。最后点『发送给 Agent』。");
 }
 
 function closePrompt() {
@@ -363,7 +363,7 @@ function askForText(kind) {
   if (!lastRange) return;
   pending = { kind, quote: lastRange.toString(), occurrence: occurrenceFor(lastRange) };
   if (!pending.quote) return;
-  promptLabel.textContent = kind === "replace" ? "Replace with" : "Comment";
+  promptLabel.textContent = kind === "replace" ? "替换为" : "批注内容";
   promptText.value = "";
   promptForm.hidden = false;
   promptText.focus();
@@ -398,7 +398,7 @@ document.addEventListener("selectionchange", () => {
 
 page.addEventListener("change", () => {
   updateBar();
-  if (comments.length === 0) say("Choice changed. Select Send to Agent when you are ready.");
+  if (comments.length === 0) say("选项已改。点『发送给 Agent』就行。");
 });
 
 page.addEventListener("click", (event) => {
@@ -406,7 +406,7 @@ page.addEventListener("click", (event) => {
   selectedId = mark ? mark.dataset.comment : null;
   if (selectedId) {
     const found = comments.find((item) => item.id === selectedId);
-    say(found ? `${found.kind}: ${found.text || found.quote}` : "");
+    say(found ? `${{ comment: "批注", delete: "删除", replace: "替换" }[found.kind] ?? found.kind}：${found.text || found.quote}` : "");
   }
   updateBar();
 });
@@ -415,23 +415,23 @@ removeButton.addEventListener("click", () => {
   comments = comments.filter((item) => item.id !== selectedId);
   selectedId = null;
   paintComments();
-  say("Comment removed.");
+  say("已移除。");
 });
 
 /* ---------- Save ---------- */
 
 saveButton.addEventListener("click", async () => {
   if (!writable) {
-    say("This file is outside the mod and cannot be changed.");
+    say("这个文件在 mod 之外，不能写入。");
     return;
   }
   const controls = readControls();
   if (comments.length === 0 && sameControls(controls, baseline)) {
-    say("Add a comment or change a choice before sending.");
+    say("没有可发送的内容：先加批注，或改一下页面上的选项。");
     return;
   }
   saveButton.disabled = true;
-  say("Sending…");
+  say("正在发送…");
   const next = withBlock(source, comments, controls);
   const result = await request("editor:save", { data: next, baseRevision: revision });
   if (result?.type === "editor:saved") {
@@ -439,18 +439,18 @@ saveButton.addEventListener("click", async () => {
     source = next;
     baseline = readControls();
     savedSinceLoad = true;
-    say("Saved to the page. Notifying the agent…");
+    say("已写入页面。正在通知 agent…");
     const text = pagePath ? `/page-annotated ${JSON.stringify(pagePath)}` : "/page-annotated";
     const sent = await request("editor:sendPrompt", { text });
     if (sent?.type === "editor:sent") {
-      say("Sent to the agent. It will read the feedback and decide what to update.");
+      say("已发送给 agent。它会读取反馈，再决定修改什么。");
     } else {
       const code = sent?.code ?? "NO_REPLY";
-      say(SEND_ERROR_TEXT[code] ?? `Saved to the page. Notification failed (${code}). Send /page-annotated yourself.`);
+      say(SEND_ERROR_TEXT[code] ?? `已写入页面。发送失败（${code}）：到对话里发送 /page-annotated。`);
     }
   } else {
     const code = result?.code ?? "SAVE_FAILED";
-    say(SAVE_ERROR_TEXT[code] ?? `Save failed: ${code}`);
+    say(SAVE_ERROR_TEXT[code] ?? `发送失败：${code}`);
   }
   saveButton.disabled = !writable;
 });
@@ -471,7 +471,7 @@ window.addEventListener("message", (event) => {
     writable = data.writable === true;
     pagePath = typeof data.file?.path === "string" ? data.file.path : "";
     setTheme(data);
-    if (!writable) saveButton.title = "This file is outside the mod and cannot be changed.";
+    if (!writable) saveButton.title = "这个文件在 mod 之外，不能写入。";
     post({ type: "editor:readFile", requestId: `r${++seq}` });
     return;
   }
@@ -496,10 +496,10 @@ window.addEventListener("message", (event) => {
     savedSinceLoad = false;
     paintComments();
     if (reload) {
-      const head = reload === "changed" ? "The page was rewritten" : "Page reloaded";
-      say(dropped ? `${head}. Unsent comments were discarded.` : `${head}. It is current.`);
+      const head = reload === "changed" ? "页面已被重写" : "已重新载入";
+      say(dropped ? `${head}：未发出的批注已作废。` : `${head}：已是最新版。`);
     } else {
-      say(comments.length ? "Previous comments are shown." : "Select text to add a comment.");
+      say(comments.length ? "上一轮的批注已显示。" : "选中文字后可以标批注。");
     }
     return;
   }
