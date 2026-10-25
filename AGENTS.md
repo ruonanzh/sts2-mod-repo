@@ -22,7 +22,7 @@ This repository is the modding environment for Slay the Spire 2. Create player m
 - `reference/ritsulib-wiki/INDEX.md`: the task map for the English RitsuLib guide.
 - `docs/INDEX.md`: the map for game, RitsuLib, PCK, decompilation, and failure documents.
 - `.pi/extensions/`: agent tools. Use `validate_mod` before `install_mod`.
-- `.pi/skills/`: role and capability procedures. `add-card` owns the card workflow.
+- `.pi/skills/`: role and capability procedures. `add-card` owns the card workflow. `how-to-speak` owns player-facing replies. `mod-page` owns choices, comparisons, and result pages.
 - `mod-repo.json`: machine-readable constants and the dependency contract.
 
 ## Rules

@@ -64,6 +64,8 @@ Use the acceptance list from the capability SKILL. For a card, check registratio
 
 Use `docs/traps.md` for disabled mods, missing runtime files, missing resources, normalized IDs, incomplete dumps, dependency versions, and duplicates.
 
+Use `mod-page` for a finished-mod summary only when the session has a writable bound mod directory. Otherwise, summarize in text.
+
 ## Common failures
 
 | Symptom | Cause | Action |

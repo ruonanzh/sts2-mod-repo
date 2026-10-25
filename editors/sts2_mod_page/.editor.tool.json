@@ -1,0 +1,9 @@
+{
+  "apiVersion": 1,
+  "id": "sts2_mod_page",
+  "name": "Slay the Spire 2 mod page",
+  "match": ["your_mods/*/.preview/*.modpage.html"],
+  "entry": "index.html",
+  "mode": "edit",
+  "description": "Show a generated mod page, collect player comments and choices, and save them."
+}

@@ -25,6 +25,8 @@ For a card, stop here and complete `.pi/skills/add-card/SKILL.md`. The remaining
 
 For another task, read `reference/ritsulib-wiki/INDEX.md`. Choose only the relevant upstream pages. Check the pinned API with `inspect_game_api` before writing code.
 
+For a non-card mod, use `mod-page` before implementation when the player must choose a scope, values, or between options.
+
 Read `docs/ritsulib.md` for framework rules and `docs/pck.md` for packaged resources.
 
 ## 3. Create the mod
