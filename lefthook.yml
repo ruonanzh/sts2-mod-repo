@@ -44,6 +44,9 @@ pre-commit:
     example-power:
       # The reference power must keep stacking, application, art, text, and attack-triggered behavior.
       run: node scripts/test-example-power.mjs
+    example-potion:
+      # The reference potion must keep targeted use, packaged art, text, and its Block effect.
+      run: node scripts/test-example-potion.mjs
     pi-lib:
       # Package version selection, multi-assembly resolution, and dump readers share this suite.
       run: cd .pi/lib && bun test

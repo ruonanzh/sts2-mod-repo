@@ -68,6 +68,10 @@ Standalone models can use different registration metadata. `RegisterPower` in Ri
 
 Measured in `ExamplePower`: the type `Momentum` registered as `EXAMPLE_POWER_POWER_MOMENTUM`. Read the registration log for the full ID. Use that full ID in `powers.json`.
 
+`RegisterPotion` supports `FullPublicEntry`. The reference potion uses `ModPotionTemplate`, `CanonicalVars`, and `OnUse`. Set `PotionUsage` and `TargetType` explicitly. Use the game's target validation before applying an effect to a targeted creature.
+
+`RegisterCharacterStarterPotion` adds starting inventory for a character. Add it only when the player requests starting potions. The reference uses it to make runtime acceptance direct.
+
 ## Localization
 
 Game model text uses the game localization tables inside the consumer PCK:
@@ -86,7 +90,9 @@ The keys use the normalized public entry:
 }
 ```
 
-The RitsuLib I18N system serves mod UI strings. Embedded I18N resources do not automatically populate the game card tables.
+Potion text uses `potions.json`. A targeted potion can also define `.selectionScreenPrompt` beside `.title` and `.description`.
+
+The RitsuLib I18N system serves mod UI strings. Embedded I18N resources do not automatically populate the game model tables.
 
 ## Asset profiles
 
@@ -101,7 +107,9 @@ public override CardAssetProfile AssetProfile => new()
 
 The path must exist in the consumer PCK. RitsuLib can provide a fallback when the resource is missing, but a fallback does not prove that the intended asset loaded.
 
-Profiles also cover characters, relics, powers, potions, orbs, monsters, encounters, and events. Use the upstream asset guide for the exact fields.
+`PotionAssetProfile` has `ImagePath` and `OutlinePath`. Match both paths to packaged assets.
+
+Profiles also cover characters, relics, powers, orbs, monsters, encounters, and events. Use the upstream asset guide for the exact fields.
 
 ## Gameplay APIs
 
@@ -112,6 +120,7 @@ Use `DamageCmd.Attack` for the reference attack. The old helper `CommonActions.C
 ## Sources
 
 - `reference/example_card/`
+- `reference/example_potion/`
 - `reference/ritsulib-wiki/getting-started.md`
 - `reference/ritsulib-wiki/content-authoring-toolkit.md`
 - `reference/ritsulib-wiki/localization-and-keywords.md`

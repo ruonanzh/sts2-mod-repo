@@ -1,0 +1,5 @@
+{
+  "EXAMPLE_POTION_AEGIS_DRAUGHT.title": "Aegis Draught",
+  "EXAMPLE_POTION_AEGIS_DRAUGHT.description": "Gain {Block} Block.",
+  "EXAMPLE_POTION_AEGIS_DRAUGHT.selectionScreenPrompt": "Choose a player to gain {Block} Block."
+}

@@ -5,7 +5,7 @@ Create Slay the Spire 2 mods under `your_mods/`. Use `validate_mod` before `inst
 - `AGENTS.md` is the product-side workspace map.
 - `docs/INDEX.md` maps game, RitsuLib, PCK, decompilation, and failure documents.
 - `reference/ritsulib-wiki/INDEX.md` maps tasks to the English RitsuLib guide.
-- `reference/example_card/` is the accepted RitsuLib card example.
+- `reference/example_card/`, `reference/example_relic/`, `reference/example_power/`, and `reference/example_potion/` are accepted RitsuLib examples.
 
 ## Mod form
 
@@ -40,4 +40,4 @@ Shared criteria live in `.pi/lib/`. `mod-repo.json` holds the static contract.
 
 ## Capability guides
 
-Use `.pi/skills/mod-creator/` for the general workflow and `.pi/skills/add-card/` for the card workflow. More capability guides will be added only after their examples pass runtime acceptance.
+Use `.pi/skills/mod-creator/` for the general workflow. Use `add-card`, `add-relic`, `add-power`, or `add-potion` for its accepted capability. More capability guides will be added only after their examples pass runtime acceptance.

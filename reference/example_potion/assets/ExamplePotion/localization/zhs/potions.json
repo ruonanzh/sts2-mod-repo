@@ -1,0 +1,5 @@
+{
+  "EXAMPLE_POTION_AEGIS_DRAUGHT.title": "庇护药剂",
+  "EXAMPLE_POTION_AEGIS_DRAUGHT.description": "获得 {Block} 点格挡。",
+  "EXAMPLE_POTION_AEGIS_DRAUGHT.selectionScreenPrompt": "选择一名玩家，使其获得 {Block} 点格挡。"
+}

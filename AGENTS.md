@@ -21,10 +21,11 @@ This repository is the modding environment for Slay the Spire 2. Create player m
 - `reference/example_card/`: a RitsuLib card with packaged art and English and Chinese text.
 - `reference/example_relic/`: a RitsuLib relic with a combat-start trigger and packaged art.
 - `reference/example_power/`: a RitsuLib power with an applying card, stacking, and packaged art.
+- `reference/example_potion/`: a RitsuLib potion with targeted use, starting-potion registration, and packaged art.
 - `reference/ritsulib-wiki/INDEX.md`: the task map for the English RitsuLib guide.
 - `docs/INDEX.md`: the map for game, RitsuLib, PCK, decompilation, and failure documents.
 - `.pi/extensions/`: agent tools. Use `validate_mod` before `install_mod`.
-- `.pi/skills/`: role and capability procedures. `add-card` owns the card workflow. `add-relic` owns the relic workflow. `add-power` owns the power workflow. `how-to-speak` owns player-facing replies. `mod-page` owns choices, comparisons, and result pages.
+- `.pi/skills/`: role and capability procedures. `add-card` owns the card workflow. `add-relic` owns the relic workflow. `add-power` owns the power workflow. `add-potion` owns the potion workflow. `how-to-speak` owns player-facing replies. `mod-page` owns choices, comparisons, and result pages.
 - `mod-repo.json`: machine-readable constants and the dependency contract.
 
 ## Rules

@@ -260,7 +260,7 @@ export default function (pi: ExtensionAPI) {
       const loc = localizationKeys(modDir, modId);
       for (const bad of loc.badJson) errors.push(`assets/${modId}/localization/${bad} is not valid JSON`);
       const localizationChecks = Object.fromEntries(
-        (["card", "relic", "power"] as ModelKind[]).map((kind) => [kind, checkModelLocalization(modDir, modId, kind)]),
+        (["card", "relic", "power", "potion"] as ModelKind[]).map((kind) => [kind, checkModelLocalization(modDir, modId, kind)]),
       ) as Record<ModelKind, ReturnType<typeof checkModelLocalization>>;
       for (const [kind, check] of Object.entries(localizationChecks) as [ModelKind, (typeof localizationChecks)[ModelKind]][]) {
         const label = kind[0].toUpperCase() + kind.slice(1);
@@ -446,9 +446,11 @@ export default function (pi: ExtensionAPI) {
         cardLocalization: localizationChecks.card.status,
         relicLocalization: localizationChecks.relic.status,
         powerLocalization: localizationChecks.power.status,
+        potionLocalization: localizationChecks.potion.status,
         cardCount: localizationChecks.card.models.length,
         relicCount: localizationChecks.relic.models.length,
         powerCount: localizationChecks.power.models.length,
+        potionCount: localizationChecks.potion.models.length,
         modId,
         installedVersion,
       },

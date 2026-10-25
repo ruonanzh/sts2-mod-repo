@@ -15,6 +15,7 @@ Choose the reference:
 
 - Use `reference/example_mod/` for an official-loader patch without RitsuLib.
 - Use `reference/example_card/` for a RitsuLib card.
+- Use `reference/example_potion/` for a RitsuLib potion.
 - For another capability, first check whether a working reference and capability SKILL exist.
 
 MUST study the chosen reference before implementation. Use it to understand a working project and its verified patterns.
@@ -28,6 +29,8 @@ For a card, stop here and complete `.pi/skills/add-card/SKILL.md`.
 For a relic, stop here and complete `.pi/skills/add-relic/SKILL.md`.
 
 For a power, stop here and complete `.pi/skills/add-power/SKILL.md`.
+
+For a potion, stop here and complete `.pi/skills/add-potion/SKILL.md`.
 
 For a combined mod, apply each capability to its item in the same mod directory. Skip individual validation and installation. Validate once after all items, then install once.
 

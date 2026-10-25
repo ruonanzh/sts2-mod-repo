@@ -180,6 +180,20 @@ test("three cards, one power, and two relics are checked independently", () => {
   assert.equal(missing.missing[0].expectedId, "EXAMPLE_POWER_CARD_CARD_TWO");
 });
 
+test("a potion uses its full public entry and potions table", () => {
+  const { root, kind } = fixture({
+    kind: "potion",
+    source: '[RegisterPotion(typeof(IroncladPotionPool), FullPublicEntry = "EXAMPLE_POTION_AEGIS_DRAUGHT")]\n[RegisterCharacterStarterPotion(typeof(Ironclad), 1)]\npublic sealed class AegisDraught {}',
+    tables: { eng: {
+      "EXAMPLE_POTION_AEGIS_DRAUGHT.title": "Aegis Draught",
+      "EXAMPLE_POTION_AEGIS_DRAUGHT.description": "Gain {Block} Block.",
+    } },
+  });
+  const result = checkModelLocalization(root, "ExamplePower", kind);
+  assert.equal(result.status, "passed");
+  assert.equal(result.models[0].expectedId, "EXAMPLE_POTION_AEGIS_DRAUGHT");
+});
+
 test("a relic uses the same localization checks", () => {
   const { root, kind } = fixture({
     kind: "relic",

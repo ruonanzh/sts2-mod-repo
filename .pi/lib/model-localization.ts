@@ -2,7 +2,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { normalizePublicStem, standaloneModelId } from "./ritsulib-ids";
 
-export type ModelKind = "card" | "relic" | "power";
+export type ModelKind = "card" | "relic" | "power" | "potion";
 
 export interface RegisteredModel {
   typeName: string;
@@ -35,9 +35,16 @@ function sourceFiles(dir: string): string[] {
   return files;
 }
 
+const MODEL_INFO = {
+  card: { attribute: "RegisterCard", pack: "Card", template: "ModCardTemplate" },
+  relic: { attribute: "RegisterRelic", pack: "Relic", template: "ModRelicTemplate" },
+  power: { attribute: "RegisterPower", pack: "Power", template: "ModPowerTemplate" },
+  potion: { attribute: "RegisterPotion", pack: "Potion", template: "ModPotionTemplate" },
+} as const;
+
 function attributePattern(kind: ModelKind): RegExp {
-  const name = kind === "card" ? "RegisterCard" : kind === "relic" ? "RegisterRelic" : "RegisterPower";
-  return new RegExp(`\\[\\s*${name}(?:Attribute)?(?:\\s*\\(([^\\]]*)\\))?\\s*\\]\\s*(?:public|internal)?\\s*(?:sealed\\s+)?(?:partial\\s+)?class\\s+([A-Za-z_][A-Za-z0-9_]*)`, "g");
+  const name = MODEL_INFO[kind].attribute;
+  return new RegExp(`\\[\\s*${name}(?:Attribute)?(?:\\s*\\(([^\\]]*)\\))?\\s*\\]\\s*(?:\\[[^\\]]*\\]\\s*)*(?:public|internal)?\\s*(?:sealed\\s+)?(?:partial\\s+)?class\\s+([A-Za-z_][A-Za-z0-9_]*)`, "g");
 }
 
 function hasNamedValue(args: string, name: string): boolean {
@@ -64,9 +71,7 @@ export function checkModelLocalization(modDir: string, modId: string, kind: Mode
   const unresolved: string[] = [];
   const invalid: string[] = [];
   let possibleRegistration = false;
-  const attributeName = kind === "card" ? "RegisterCard" : kind === "relic" ? "RegisterRelic" : "RegisterPower";
-  const packMethod = kind === "card" ? "Card" : kind === "relic" ? "Relic" : "Power";
-  const templateName = kind === "card" ? "ModCardTemplate" : kind === "relic" ? "ModRelicTemplate" : "ModPowerTemplate";
+  const { attribute: attributeName, pack: packMethod, template: templateName } = MODEL_INFO[kind];
   for (const file of sourceFiles(modDir)) {
     const text = readFileSync(file, "utf8");
     if (new RegExp(`\\[\\s*${attributeName}`).test(text) && text.includes(templateName)) possibleRegistration = true;
