@@ -1,18 +1,18 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
 import { existsSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { runAsync } from "../lib/proc";
 import { managedDirFor, readGameConfig, readModRepoConfig, readState } from "../lib/game-paths";
-import { resolveApiSources, type ApiSource } from "../lib/api-sources";
+import { resolveApiSources, type ApiSource, type PackageSpec } from "../lib/api-sources";
 
 /**
  * inspect_game_api -- find the exact name of a type or member, then read its C#, its IL,
  * or the string literals around it. The surface matches the sibling game repositories.
  *
  * The API a mod codes against spans more than one assembly. For Slay the Spire 2 a card
- * inherits BaseLib's `CustomCardModel`, whose base is the game's `CardModel`, so half the
- * names come from `sts2.dll` and half from `BaseLib.dll`. A tool that sees only one of them
+ * can inherit RitsuLib's `ModCardTemplate`, whose base is the game's `CardModel`, so the
+ * names come from `sts2.dll` and the RitsuLib modules. A tool that sees only one of them
  * invites guesses for the other half, and a guess fails as CS0246/CS0012 without saying
  * which mistake was made. So this searches every assembly declared in mod-repo.json and
  * labels each result.
@@ -53,14 +53,14 @@ export default function (pi: ExtensionAPI) {
     name: "inspect_game_api",
     label: "Inspect API",
     description:
-      "Read the exact type and member names, the C#, the IL, and the string literals of every assembly the repository declares: the game (sts2.dll) and its standard framework (BaseLib.dll). The five actions are search, members, decompile, il, and strings. search finds types and members whose name contains the target. members lists one type's members and its base chain. decompile turns one type or member into C#. il turns one type or method into IL. strings lists string literals. Results are tagged with the assembly they came from. Use it before writing code that touches a game or BaseLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It reads the assemblies on disk and never loads or runs the game.",
-    promptSnippet: "Look up exact type and member names across the game and BaseLib before writing mod code",
+      "Read the exact type and member names, the C#, the IL, and the string literals of every assembly the repository declares: the game (sts2.dll) and the pinned RitsuLib modules. The five actions are search, members, decompile, il, and strings. search finds types and members whose name contains the target. members lists one type's members and its base chain. decompile turns one type or member into C#. il turns one type or method into IL. strings lists string literals. Results are tagged with the assembly they came from. Use it before writing code that touches a game or RitsuLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It reads the assemblies on disk and never loads or runs the game.",
+    promptSnippet: "Look up exact type and member names across the game and RitsuLib before writing mod code",
     promptGuidelines: [
-      "Call inspect_game_api before you write code that touches a game or BaseLib type. Do not guess names. The two assemblies carry different halves of what a card needs.",
+      "Call inspect_game_api before you write code that touches a game or RitsuLib type. Do not guess names. The game and RitsuLib assemblies carry different parts of what a card needs.",
       "Use action=search with a short substring. It matches both type names and member names, so searching for a method such as PortraitPath works and tells you which type owns it.",
-      "Use action=members to see a type's base chain. A BaseLib type derives from a game type, so a hit tagged baselib almost always means sts2.dll is needed too. members shows this directly.",
-      "A hit tagged baselib also means the mod must reference BaseLib and declare it in the manifest dependencies.",
-      "A type can sit in either assembly. If a lookup misses, try the other one with dll=game or dll=baselib before you decide the type does not exist. A miss from search never proves that nothing uses a name; that needs a call-site, which is what the decompiled dump is for.",
+      "Use action=members to see a type's base chain. A RitsuLib type derives from a game type, so a hit tagged ritsulib almost always means sts2.dll is needed too. members shows this directly.",
+      "A hit tagged ritsulib also means the mod must reference the RitsuLib package and declare STS2-RitsuLib in the manifest dependencies.",
+      "A type can sit in any declared assembly. If a lookup misses, try dll=game or dll=ritsulib before you decide the type does not exist. A miss from search never proves that nothing uses a name; that needs a call-site, which is what the decompiled dump is for.",
       "When you learn something this way, write the fact and the target you used into docs/, so the next session does not repeat it.",
     ],
     parameters: Type.Object({
@@ -80,7 +80,7 @@ export default function (pi: ExtensionAPI) {
       target: Type.Optional(
         Type.String({
           description:
-            'A full type name such as "MegaCrit.Sts2.Core.Models.CardModel" or "BaseLib.Abstracts.CustomCardModel", or a substring for action=search such as "CustomCard".',
+            'A full type name such as "MegaCrit.Sts2.Core.Models.CardModel" or "STS2RitsuLib.Scaffolding.Content.ModCardTemplate", or a substring for action=search such as "ModCard".',
         }),
       ),
       member: Type.Optional(
@@ -91,7 +91,7 @@ export default function (pi: ExtensionAPI) {
       dll: Type.Optional(
         Type.String({
           description:
-            'Which assembly to read: "game", "baselib", the assembly name such as "sts2", or "all". Default "all", which is what you normally want because a card needs names from both.',
+            'Which assembly to read: "game", "ritsulib", an assembly name such as "sts2" or "STS2-RitsuLib.Runtime", or "all". Default "all", which searches the game and every pinned RitsuLib module.',
         }),
       ),
       limit: Type.Optional(Type.Number({ description: "Maximum output lines. Default 400." })),
@@ -171,7 +171,7 @@ export default function (pi: ExtensionAPI) {
             ? managedDirFor(gameDir, cfg)
             : null;
       let references: string[] = [];
-      let packages: { id: string; label: string; assembly: string }[] = [];
+      let packages: PackageSpec[] = [];
       try {
         const raw = readGameConfig(repoRoot);
         references = raw.assemblies ?? [];
@@ -181,7 +181,7 @@ export default function (pi: ExtensionAPI) {
       }
 
       const { sources, notes } = resolveApiSources({ managedDir: managed, references, packages });
-      // `dll` mirrors the other game repository: a label ("game", "baselib"), an assembly name
+      // `dll` mirrors the other game repository: a label ("game", "ritsulib"), an assembly name
       // ("sts2"), or "all". The label is ours; the assembly name is what the sibling tool calls it.
       const wanted = (params.dll ?? "all").trim().toLowerCase();
       const active =
@@ -218,7 +218,7 @@ export default function (pi: ExtensionAPI) {
 
       // One probe run per assembly, always with the game's data directory as the resolver
       // root. That matters for correctness, not tidiness: api-probe builds a
-      // UniversalAssemblyResolver over --managed, so probing BaseLib with the NuGet folder as
+      // UniversalAssemblyResolver over --managed, so probing RitsuLib with the NuGet folder as
       // the root leaves sts2.dll unresolvable and its base chain comes back empty (the class
       // base is dropped as TypeKind.Unknown). Pointing the resolver at the game directory and
       // loading the package assembly by an absolute --dll keeps the chain intact -
@@ -243,7 +243,7 @@ export default function (pi: ExtensionAPI) {
         try {
           const r = await runAsync(dotnet, args, {
             cwd: repoRoot,
-            env: { ...process.env, DOTNET_ROOT: dotnet.replace(/\/dotnet(\.exe)?$/, "") },
+            env: { ...process.env, DOTNET_ROOT: dirname(dotnet) },
             timeoutMs: 180_000,
           });
           runs.push({ source: s, stdout: r.stdout.trim(), failed: false });

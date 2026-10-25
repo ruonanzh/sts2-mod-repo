@@ -109,14 +109,17 @@ export function compareVersions(a: string | null, b: string | null): -1 | 0 | 1 
  * 目录里可能有多份 json（游戏自带模组也这么放），所以按 id 找：
  * `<id>.json` 优先，其次任何一份 id 对得上的。文件名不对不算，交给调用方判断。
  */
-function readManifestIn(dir: string, id: string): { version: string | null } | null {
+function manifestCandidates(dir: string, id: string): string[] {
   const preferred = join(dir, `${id}.json`);
-  const candidates = existsSync(preferred)
-    ? [preferred]
-    : safeReaddir(dir)
-        .filter((n) => n.toLowerCase().endsWith(".json"))
-        .map((n) => join(dir, n));
-  for (const p of candidates) {
+  const rest = safeReaddir(dir)
+    .filter((n) => n.toLowerCase().endsWith(".json") && join(dir, n) !== preferred)
+    .sort()
+    .map((n) => join(dir, n));
+  return existsSync(preferred) ? [preferred, ...rest] : rest;
+}
+
+function readManifestIn(dir: string, id: string): { version: string | null } | null {
+  for (const p of manifestCandidates(dir, id)) {
     try {
       const data = JSON.parse(stripBom(readFileSync(p, "utf8"))) as {
         id?: unknown;
@@ -129,6 +132,19 @@ function readManifestIn(dir: string, id: string): { version: string | null } | n
     }
   }
   return null;
+}
+
+/** Read a dependency's own dependencies from either official manifest naming convention. */
+export function readDependencySpecsInDir(dir: string, id: string): DepSpec[] {
+  for (const path of manifestCandidates(dir, id)) {
+    try {
+      const data = JSON.parse(stripBom(readFileSync(path, "utf8"))) as { id?: unknown };
+      if (data.id === id) return readDependencySpecs(path);
+    } catch {
+      /* Try the next manifest. */
+    }
+  }
+  return [];
 }
 
 function safeReaddir(dir: string): string[] {

@@ -15,8 +15,11 @@ import { modInstallDirFor, pathsFromGameDir, readModRepoConfig, readState } from
 import { readManifest } from "../lib/mod-identity";
 import { readModLoadingState } from "../lib/game-settings";
 import {
+  compareVersions,
   decideDependencyAction,
+  parseVersion,
   readDependencySpecs,
+  readDependencySpecsInDir,
   resolveDependency,
   stripBom,
   type DepSpec,
@@ -85,6 +88,7 @@ function chooseTarget(modRoot: string, dirName: string, record: InstallRecord | 
 interface VendorSpec {
   id: string;
   dir: string;
+  version?: string;
   workshopUrl?: string;
 }
 
@@ -99,16 +103,31 @@ function readVendorSpecs(repoRoot: string): VendorSpec[] {
   if (!Array.isArray(list)) return [];
   const out: VendorSpec[] = [];
   for (const entry of list) {
-    const rec = entry as { id?: unknown; vendorDir?: unknown; workshopUrl?: unknown };
+    const rec = entry as { id?: unknown; vendorDir?: unknown; version?: unknown; workshopUrl?: unknown };
     if (typeof rec?.id !== "string" || !rec.id.trim()) continue;
     if (typeof rec?.vendorDir !== "string" || !rec.vendorDir.trim()) continue;
     out.push({
       id: rec.id.trim(),
       dir: resolve(repoRoot, rec.vendorDir),
+      version: typeof rec.version === "string" && rec.version.trim() ? rec.version.trim() : undefined,
       workshopUrl: typeof rec.workshopUrl === "string" ? rec.workshopUrl : undefined,
     });
   }
   return out;
+}
+
+/** Accept the official dependency manifest by id, including RitsuLib's mod_manifest.json. */
+function readBundledManifest(dir: string, id: string): { version: string | null } | null {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".json")) continue;
+    try {
+      const data = JSON.parse(stripBom(readFileSync(join(dir, entry.name), "utf8"))) as { id?: unknown; version?: unknown };
+      if (data.id === id) return { version: typeof data.version === "string" ? data.version : null };
+    } catch {
+      /* A non-manifest JSON is reported by the game. Keep looking for the real manifest. */
+    }
+  }
+  return null;
 }
 
 /**
@@ -119,6 +138,7 @@ function readVendorSpecs(repoRoot: string): VendorSpec[] {
 function installBundled(
   vendor: VendorSpec,
   modRoot: string,
+  requiredVersion: string | null,
 ): { ok: true; dir: string } | { ok: false; reason: string } {
   if (!existsSync(vendor.dir)) return { ok: false, reason: `${vendor.dir} does not exist` };
   const target = join(modRoot, vendor.id);
@@ -127,16 +147,28 @@ function installBundled(
   try {
     mkdirSync(staging, { recursive: true });
     for (const entry of readdirSync(vendor.dir, { withFileTypes: true })) {
-      if (!entry.isFile()) continue;
-      // Documentation and licences are ours, not the game's.
-      if (entry.name.toLowerCase() === "readme.md") continue;
-      if (entry.name.toLowerCase().startsWith("license")) continue;
-      cpSync(join(vendor.dir, entry.name), join(staging, entry.name));
+      // Documentation and licences are ours, not the game's. Every runtime directory is kept.
+      if (entry.isFile() && entry.name.toLowerCase() === "readme.md") continue;
+      if (entry.isFile() && entry.name.toLowerCase().startsWith("license")) continue;
+      cpSync(join(vendor.dir, entry.name), join(staging, entry.name), { recursive: true });
     }
-    // The loader finds a mod's manifest by id, so a missing <id>.json would install nothing.
-    if (!existsSync(join(staging, `${vendor.id}.json`))) {
+    // Official dependencies can use mod_manifest.json. Match the id instead of the file name.
+    const manifest = readBundledManifest(staging, vendor.id);
+    if (!manifest) {
       rmSync(staging, { recursive: true, force: true });
-      return { ok: false, reason: `the bundled copy has no ${vendor.id}.json` };
+      return { ok: false, reason: `the bundled copy has no manifest with id ${vendor.id}` };
+    }
+    if (!manifest.version || !parseVersion(manifest.version)) {
+      rmSync(staging, { recursive: true, force: true });
+      return { ok: false, reason: `the bundled ${vendor.id} manifest has no readable version; installation was stopped` };
+    }
+    if (vendor.version && compareVersions(manifest.version, vendor.version) !== 0) {
+      rmSync(staging, { recursive: true, force: true });
+      return { ok: false, reason: `the bundled ${vendor.id} version ${manifest.version} does not match repository version ${vendor.version}; installation was stopped` };
+    }
+    if (requiredVersion && compareVersions(manifest.version, requiredVersion) === -1) {
+      rmSync(staging, { recursive: true, force: true });
+      return { ok: false, reason: `the bundled ${vendor.id} version ${manifest.version} is older than required ${requiredVersion}; installation was stopped` };
     }
     renameSync(staging, target);
     return { ok: true, dir: target };
@@ -189,7 +221,7 @@ function handleDependencies(args: {
         );
         continue;
       }
-      const done = installBundled(vendor, modRoot);
+      const done = installBundled(vendor, modRoot, spec.minVersion);
       if (!done.ok) {
         lines.push(`WARN: dependency ${spec.id} is not installed and the bundled copy could not be placed: ${done.reason}.`);
         blockers.push(
@@ -256,6 +288,15 @@ function findDll(modDir: string, id: string): string | null {
     join(modDir, `${id}.dll`),
     join(modDir, "bin", "Release", `${id}.dll`),
     join(modDir, "bin", "Debug", `${id}.dll`),
+  ];
+  return candidates.find((p) => existsSync(p)) ?? null;
+}
+
+function findPck(modDir: string, id: string): string | null {
+  const candidates = [
+    join(modDir, `${id}.pck`),
+    join(modDir, "bin", "Release", `${id}.pck`),
+    join(modDir, "bin", "Debug", `${id}.pck`),
   ];
   return candidates.find((p) => existsSync(p)) ?? null;
 }
@@ -342,6 +383,18 @@ export default function (pi: ExtensionAPI) {
 
       // Products. The two file names are hard requirements: the loader reads <id>.dll.
       const dll = findDll(modDir, id);
+      const pck = findPck(modDir, id);
+      if (manifest.data.has_pck === true && !pck) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `FAIL: ${id}.pck not found in ${modDir} (looked in the mod directory and under bin/Release).\nNEXT: run validate_mod to build the PCK, then install again.`,
+            },
+          ],
+          details: { ok: false, reason: "NO_PCK", modId: id },
+        };
+      }
       if (!dll) {
         return {
           content: [
@@ -379,6 +432,7 @@ export default function (pi: ExtensionAPI) {
         mkdirSync(staging, { recursive: true });
         cpSync(manifest.identity.manifestPath, join(staging, `${id}.json`));
         cpSync(dll, join(staging, `${id}.dll`));
+        if (manifest.data.has_pck === true && pck) cpSync(pck, join(staging, `${id}.pck`));
 
         // Images that a mod loads at runtime from its own directory. A DLL-only mod has no
         // res://<id>/ namespace, so a texture has to come from a file next to the assembly.
@@ -443,7 +497,7 @@ export default function (pi: ExtensionAPI) {
           `NOTE: the target ${dirName} is used by another mod, so this copy went to ${targetName}. That other mod was not touched.`,
         );
 
-      // Dependency mods (BaseLib and the like). This mod cannot load without them, and
+      // Dependency mods. This mod cannot load without them, and
       // copying one over an existing copy would pin that copy's version forever.
       const workshopDir =
         typeof state.workshopDir === "string"
@@ -452,16 +506,29 @@ export default function (pi: ExtensionAPI) {
             ? pathsFromGameDir(gameDir, config).workshopDir
             : null;
       let depLockers: string[] = [];
-      const specs = readDependencySpecs(manifest.identity.manifestPath);
-      if (specs.length) {
+      const pending = readDependencySpecs(manifest.identity.manifestPath);
+      const visited = new Map<string, string | null>();
+      const vendors = readVendorSpecs(repoRoot);
+      while (pending.length) {
+        const spec = pending.shift()!;
+        if (visited.has(spec.id)) {
+          const previous = visited.get(spec.id) ?? null;
+          if (!spec.minVersion) continue;
+          if (previous && compareVersions(spec.minVersion, previous) !== 1) continue;
+        }
+        visited.set(spec.id, spec.minVersion);
         const report = handleDependencies({
-          specs,
+          specs: [spec],
           ctx: { modRoot, workshopDir },
           modRoot,
-          vendors: readVendorSpecs(repoRoot),
+          vendors,
         });
         lines.push(...report.lines);
-        depLockers = report.blockers;
+        depLockers.push(...report.blockers);
+        const installed = resolveDependency(spec, { modRoot, workshopDir }).installations;
+        for (const installation of installed) {
+          pending.push(...readDependencySpecsInDir(installation.dir, spec.id));
+        }
       }
 
       // Report the mod-loading switch. This is the difference between "installed" and

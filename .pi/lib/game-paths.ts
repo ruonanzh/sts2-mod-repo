@@ -17,6 +17,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { execFileSync } from "node:child_process";
+import type { PackageSpec } from "./api-sources";
 /** 游戏自带的程序集（哨兵）：它在，才说明这个目录确实是这个游戏。
  *  **值来自 `mod-repo.json` 的 `sentinel`**；这里只是兜底（未配置时为空，判据退化为「Managed 目录存在」）。 */
 export let GAME_SENTINEL = "";
@@ -29,7 +30,7 @@ export interface ModRepoConfig {
     steamAppId?: string | number;
     installDirHint?: Record<string, string>;
   };
-  compile?: { managedDir?: Record<string, string> };
+  compile?: { managedDir?: Record<string, string>; pck?: boolean };
   modInstall?: { path?: Record<string, string>; relativeTo?: string };
   /** 这个游戏**有没有创意工坊**（U29/U30）。缺失 = 未知 —— **不是** false。 */
   workshop?: { supported?: boolean };
@@ -91,9 +92,11 @@ export interface GameConfig {
   assetsDir?: string;
   /** 编译需要的 .NET SDK 主版本下限（来自 `compile.sdkMajor`） */
   sdkMajor?: number;
+  /** Whether this repository can build PCK assets for mods that declare has_pck. */
+  pck?: boolean;
   assemblies?: string[];
   /** 也要能查 API 的 NuGet 包程序集（来自 `compile.packages`） */
-  packages?: { id: string; label: string; assembly: string }[];
+  packages?: PackageSpec[];
   modules?: string[];
   /** 该游戏允许的 config action 名。空数组 = 不校验 action；缺省 = 用骨架的默认集合。 */
   actions?: string[];
@@ -130,7 +133,8 @@ export function readGameConfig(cwd: string): GameConfig {
       managedDir?: string | Record<string, string>;
       references?: string[];
       sdkMajor?: number;
-      packages?: { id: string; label: string; assembly: string }[];
+      pck?: boolean;
+      packages?: PackageSpec[];
     };
     modInstall?: { path?: string | Record<string, string> };
     workshop?: { supported?: boolean };
@@ -148,6 +152,7 @@ export function readGameConfig(cwd: string): GameConfig {
     managedDir: raw.compile?.managedDir,
     modInstallPath: raw.modInstall?.path,
     sdkMajor: typeof raw.compile?.sdkMajor === "number" ? raw.compile.sdkMajor : undefined,
+    pck: typeof raw.compile?.pck === "boolean" ? raw.compile.pck : undefined,
     assemblies: raw.compile?.references,
     packages: raw.compile?.packages,
     workshop: typeof raw.workshop?.supported === "boolean" ? raw.workshop.supported : undefined,
@@ -168,7 +173,7 @@ export function readModRepoConfig(cwd: string): ModRepoConfig {
   return {
     sentinel: g.sentinel ?? "",
     game: { name: g.name, steamAppId: g.steamAppId, installDirHint: g.installDirHint },
-    compile: { managedDir: perPlatform(g.managedDir, platforms) },
+    compile: { managedDir: perPlatform(g.managedDir, platforms), pck: g.pck },
     modInstall: { path: perPlatform(g.modInstallPath, platforms), relativeTo: "gameDir" },
     workshop: typeof g.workshop === "boolean" ? { supported: g.workshop } : undefined,
   };

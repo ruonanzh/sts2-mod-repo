@@ -6,14 +6,12 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+    <RitsuLibAutoCopy>false</RitsuLibAutoCopy>
     <ManagedDir Condition="'$(GAME_MANAGED_DIR)' != ''">$(GAME_MANAGED_DIR)</ManagedDir>
-    <ManagedDir Condition="'$(ManagedDir)' == ''">/Users/roninzhao/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/Resources/data_sts2_macos_arm64</ManagedDir>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="sts2"><HintPath>$(ManagedDir)/sts2.dll</HintPath><Private>false</Private></Reference>
     <Reference Include="0Harmony"><HintPath>$(ManagedDir)/0Harmony.dll</HintPath><Private>false</Private></Reference>
-    <!-- 要直接构造 Godot 类型（Texture2D / Image）就得引它。游戏运行时本来就加载了同一个。 -->
-    <Reference Include="GodotSharp"><HintPath>$(ManagedDir)/GodotSharp.dll</HintPath><Private>false</Private></Reference>
-    <PackageReference Include="Alchyr.Sts2.BaseLib" Version="3.4.7" PrivateAssets="all" ExcludeAssets="runtime" />
+    <PackageReference Include="STS2.RitsuLib.Compat.0.107.1" Version="0.6.10" PrivateAssets="all" ExcludeAssets="runtime" />
   </ItemGroup>
 </Project>

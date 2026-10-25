@@ -281,6 +281,12 @@ export function checkFreshness(cwd: string, cfg: DecompileConfig, managedDir: st
   else if (manifest.config.signature !== configSignature(cfg)) reasons.push("decompile.json changed");
   if (!manifest.assemblies?.length) reasons.push("the dump records no assemblies");
   if (managedDir) {
+    const coverage = resolveAssemblies(cwd, cfg, managedDir);
+    for (const missing of coverage.missing) reasons.push(`configured assembly is unavailable: ${missing}`);
+    const recorded = new Set((manifest.assemblies ?? []).map((a) => a.name.toLowerCase()));
+    for (const assembly of coverage.resolved) {
+      if (!recorded.has(assembly.name.toLowerCase())) reasons.push(`dump lacks configured assembly: ${assembly.name}`);
+    }
     const changed = (manifest.assemblies ?? []).filter((a) => {
       if (!existsSync(a.dllPath)) return false;
       return sha256File(a.dllPath) !== a.sha256;

@@ -17,10 +17,6 @@ namespace ExampleCard;
 /// 也就是两道门：**解锁**（靠 epoch 过滤，我们的卡没有 epoch，本来就算解锁）、
 /// **发现**（`DiscoveredCards` 里有没有这个 id，只有真在局里遇到过才会写进去）。
 ///
-/// BaseLib 自己也做这件事，但只对 `CustomCardPoolModel`（自定义卡池）生效：
-/// `CustomCardPoolMarkAsSeenPatch` 里 `if (allCardPool is CustomCardPoolModel { SeenByDefault: not false })`。
-/// 我们把卡放进原版的 `IroncladCardPool`，所以那条路管不到。
-///
 /// 这里照样打 `RefreshVisibility` 的 prefix：在百科读取 `Progress` **之前**把 id 写进去。
 /// 不放在 mod 初始化里，是为了只在玩家真的翻开百科时才动存档。
 /// </summary>

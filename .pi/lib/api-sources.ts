@@ -4,8 +4,8 @@
  *
  * 两类来源，路径规则完全不同：
  *   · 游戏程序集：来自 `mod-repo.json` 的 `compile.references`，落在游戏数据目录里；
- *   · 包程序集：来自 `compile.packages`，落在 NuGet 全局缓存里，**版本不写进清单**
- *     （取本机已 restore 的最高版本——那才是编译时真正用的那一份）。
+ *   · 包程序集：来自 `compile.packages`，落在 NuGet 全局缓存里。声明 `version` 时只读该版本；
+ *     未声明时取本机已 restore 的最高版本，并把实际版本报出去。
  *
  * 每个来源自带一个「根目录」：`tools/api-probe` 用 `--managed <dir> --dll <name>`，
  * 而 `--dll` 是按 `--managed` 解析的相对名。所以工具要**按根目录分组跑多次**，
@@ -36,7 +36,14 @@ export interface ResolvedSources {
 export interface PackageSpec {
   id: string;
   label: string;
-  assembly: string;
+  /** Optional exact package version. Compatibility branches must pin this. */
+  version?: string;
+  /** Runtime mod id required in a consumer manifest. */
+  runtimeId?: string;
+  /** Backward-compatible single assembly. */
+  assembly?: string;
+  /** All public modules supplied by the package. */
+  assemblies?: string[];
 }
 
 /** 语义化版本比较（够用即可：只处理数字段）。 */
@@ -56,27 +63,28 @@ function nugetRoot(): string {
 }
 
 /**
- * 在 NuGet 缓存里找一个包程序集。
- *
- * 版本不在清单里钉死，因为 BaseLib 会升级；钉死会让清单在玩家装了新版之后失效。
- * 这里取**本机已 restore 的最高版本**，并把实际版本报出去，让「查的是哪一版」可回溯。
+ * 在 NuGet 缓存里找一个包程序集。兼容分支通过固定 version 防止读错游戏 API。
  */
-function findPackageAssembly(spec: PackageSpec): { dllPath: string; version: string } | null {
+function findPackageAssembly(spec: PackageSpec, assembly: string): { dllPath: string; version: string } | null {
   const pkgDir = join(nugetRoot(), spec.id.toLowerCase());
   if (!existsSync(pkgDir)) return null;
   let versions: string[];
-  try {
-    versions = readdirSync(pkgDir).filter((v) => {
-      try {
-        return statSync(join(pkgDir, v)).isDirectory();
-      } catch {
-        return false;
-      }
-    });
-  } catch {
-    return null;
+  if (spec.version) {
+    versions = [spec.version];
+  } else {
+    try {
+      versions = readdirSync(pkgDir).filter((v) => {
+        try {
+          return statSync(join(pkgDir, v)).isDirectory();
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return null;
+    }
+    versions.sort((a, b) => cmpVersion(b, a));
   }
-  versions.sort((a, b) => cmpVersion(b, a));
   for (const version of versions) {
     const libDir = join(pkgDir, version, "lib");
     if (!existsSync(libDir)) continue;
@@ -89,7 +97,7 @@ function findPackageAssembly(spec: PackageSpec): { dllPath: string; version: str
     }
     tfms.sort((a, b) => (a === "net9.0" ? -1 : b === "net9.0" ? 1 : a.localeCompare(b)));
     for (const tfm of tfms) {
-      const dll = join(libDir, tfm, spec.assembly);
+      const dll = join(libDir, tfm, assembly);
       if (existsSync(dll)) return { dllPath: dll, version };
     }
   }
@@ -130,20 +138,27 @@ export function resolveApiSources(inputs: SourceInputs): ResolvedSources {
   }
 
   for (const spec of inputs.packages) {
-    const hit = findPackageAssembly(spec);
-    if (!hit) {
-      notes.push(
-        `NOTE: package ${spec.id} is not in the NuGet cache, so ${spec.label} was not searched. It arrives with "dotnet restore" in a mod that references it.`,
-      );
-      continue;
+    const assemblies = spec.assemblies?.length
+      ? spec.assemblies
+      : spec.assembly
+        ? [spec.assembly]
+        : [];
+    for (const assembly of assemblies) {
+      const hit = findPackageAssembly(spec, assembly);
+      if (!hit) {
+        notes.push(
+          `NOTE: package ${spec.id}${spec.version ? ` ${spec.version}` : ""} is missing configured assembly ${assembly}; it was not searched.`,
+        );
+        continue;
+      }
+      sources.push({
+        label: spec.label,
+        assembly: basename(hit.dllPath, ".dll"),
+        dllPath: hit.dllPath,
+        root: dirname(hit.dllPath),
+        version: hit.version,
+      });
     }
-    sources.push({
-      label: spec.label,
-      assembly: basename(hit.dllPath, ".dll"),
-      dllPath: hit.dllPath,
-      root: dirname(hit.dllPath),
-      version: hit.version,
-    });
   }
 
   return { sources, notes };

@@ -20,6 +20,24 @@ pre-commit:
       # The R0 lightweight packer must preserve PCK offsets and hashes, emit imported PNG pairs,
       # stay deterministic, and reject bad source images without leaving a partial pack.
       run: node scripts/test-pck-pack.mjs
+    mod-install-ritsulib:
+      # RitsuLib uses mod_manifest.json and nested shared/compat runtime directories.
+      run: node scripts/test-mod-install-ritsulib.mjs
+    ritsulib-contract:
+      # Compile package, runtime version, vendor manifest, and dump sources must agree.
+      run: node scripts/test-ritsulib-contract.mjs
+    mod-lint-ritsulib:
+      # Cover PCK modes, missing assets, stale artifacts, and framework dependency rules.
+      run: node scripts/test-mod-lint-ritsulib.mjs
+    inspect-code-incomplete:
+      # A partial configured dump must not be reported as a successful complete dump.
+      run: node scripts/test-inspect-code-incomplete.mjs
+    example-card:
+      # The reference card must keep its RitsuLib package, assets, and full build contract.
+      run: node scripts/test-example-card.mjs
+    pi-lib:
+      # Package version selection, multi-assembly resolution, and dump readers share this suite.
+      run: cd .pi/lib && bun test
     # If this game needs another check, for example probe options that must match the tool surface,
     # add a command here and put the script in scripts/. Do not reserve a hook for one game in a
     # skeleton repository.

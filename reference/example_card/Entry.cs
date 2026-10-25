@@ -1,4 +1,7 @@
+using System.Reflection;
 using MegaCrit.Sts2.Core.Modding;
+using STS2RitsuLib;
+using STS2RitsuLib.Interop;
 
 namespace ExampleCard;
 
@@ -7,9 +10,10 @@ public static class Entry
 {
     public static void Init()
     {
-        // 本 mod 带 [ModInitializer]，所以加载器**不会**自动 Harmony.PatchAll，得自己打。
-        // 少了这一行，补丁类只是普通类，什么也不做，而且不报错。
-        new HarmonyLib.Harmony("ExampleCard").PatchAll(typeof(Entry).Assembly);
-        MegaCrit.Sts2.Core.Logging.Log.Info("[ExampleCard] loaded");
+        var assembly = Assembly.GetExecutingAssembly();
+        var logger = RitsuLibFramework.CreateLogger("ExampleCard");
+        ModTypeDiscoveryHub.RegisterModAssembly("ExampleCard", assembly);
+        new HarmonyLib.Harmony("ExampleCard").PatchAll(assembly);
+        logger.Info("ExampleCard initialized; assembly registered for RitsuLib discovery");
     }
 }

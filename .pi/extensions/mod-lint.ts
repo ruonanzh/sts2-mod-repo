@@ -1,10 +1,10 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, rmSync, statSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { runAsync } from "../lib/proc";
 import { probeDotnet } from "../lib/dotnet";
-import { managedDirFor, readModRepoConfig, readState } from "../lib/game-paths";
+import { managedDirFor, readGameConfig, readModRepoConfig, readState } from "../lib/game-paths";
 import { MANIFEST_KEYS, isParseableVersion, readManifest } from "../lib/mod-identity";
 
 /**
@@ -64,6 +64,15 @@ function findCsproj(modDir: string): string | null {
   }
 }
 
+function hasSourceFiles(dir: string): boolean {
+  if (!existsSync(dir)) return false;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    if (entry.isFile()) return true;
+    if (entry.isDirectory() && hasSourceFiles(join(dir, entry.name))) return true;
+  }
+  return false;
+}
+
 /** Read <AssemblyName> out of a csproj. The loader finds <id>.dll, so this must equal id. */
 function readAssemblyName(csprojPath: string): string | null {
   try {
@@ -75,7 +84,7 @@ function readAssemblyName(csprojPath: string): string | null {
   }
 }
 
-/** Walk localization/<lang>/*.json and collect key names, so we can check the MODID- prefix. */
+/** Walk localization/<lang>/*.json and collect key names and malformed files. */
 function localizationKeys(modDir: string): { keys: string[]; badJson: string[] } {
   const keys: string[] = [];
   const badJson: string[] = [];
@@ -117,7 +126,7 @@ export default function (pi: ExtensionAPI) {
     name: "validate_mod",
     label: "Validate Mod",
     description:
-      "Validates a Slay the Spire 2 mod directory and compiles it. Checks the manifest (single <id>.json, id equal to the file name, only the 10 loader keys), the project's AssemblyName, the min_game_version against the installed game, the BaseLib dependency floor, and the localization key prefix. Then runs dotnet build and inspects the produced <id>.dll. The build writes output inside the mod directory. It does not edit source and does not test gameplay. Output text uses PASS, FAIL, or PARTIAL plus a NEXT line. Skipped compilation is PARTIAL, never PASS.",
+      "Validates a Slay the Spire 2 mod directory and compiles it. Checks the manifest (single <id>.json, id equal to the file name, only the 10 loader keys), the project's AssemblyName, the min_game_version against the installed game, the configured RitsuLib dependency, and localization JSON. Then runs dotnet build, builds an optional PCK from assets/, and inspects the produced artifacts. The build writes output inside the mod directory. It does not edit source and does not test gameplay. Output text uses PASS, FAIL, or PARTIAL plus a NEXT line. Skipped compilation is PARTIAL, never PASS.",
     promptSnippet: "Validate and compile a Slay the Spire 2 mod before installing it",
     promptGuidelines: [
       "Run validate_mod on a mod directory after changing the manifest or C# source, and before install_mod. It compiles, so do not repeat the same dotnet build separately.",
@@ -133,6 +142,8 @@ export default function (pi: ExtensionAPI) {
     async execute(_toolCallId, params, _signal, _onUpdate, ctx) {
       const repoRoot = ctx.cwd;
       const modDir = resolve(repoRoot, params.modDir);
+      const cfg = readModRepoConfig(repoRoot);
+      const gameConfig = readGameConfig(repoRoot);
       const errors: string[] = [];
       const warnings: string[] = [];
 
@@ -156,10 +167,10 @@ export default function (pi: ExtensionAPI) {
             `the loader ignores unknown manifest keys: ${unknown.join(", ")}. Check them for typos`,
           );
 
-        // 3. has_dll must be true: v1 ships DLL-only mods (compile.pck is false in mod-repo.json).
+        // 3. Every mod has a DLL. PCK is optional only when the repo enables the packer.
         if (manifestData.has_dll !== true)
           errors.push('has_dll must be true. Without it the loader never loads the assembly');
-        if (manifestData.has_pck === true)
+        if (manifestData.has_pck === true && cfg.compile?.pck !== true)
           errors.push(
             "has_pck is true, but this repo builds DLL-only mods. Either ship the .pck or set has_pck to false. A declared but missing .pck makes the loader log an error and load the mod without its assets.",
           );
@@ -181,20 +192,7 @@ export default function (pi: ExtensionAPI) {
         }
       }
 
-      // 6. BaseLib floor. BaseLib 3.3.0 is the first version that pairs with game 0.107;
-      //    below that the API surface differs.
-      const deps = manifest.ok ? manifestData.dependencies : undefined;
-      if (Array.isArray(deps)) {
-        const baseLib = deps.find((d) => (d as { id?: string })?.id === "BaseLib") as
-          | { min_version?: string }
-          | undefined;
-        if (baseLib?.min_version && cmpVersion(baseLib.min_version, "3.3.0") < 0)
-          warnings.push(
-            `BaseLib min_version is ${baseLib.min_version}. This harness targets game 0.107.1, which pairs with BaseLib 3.3.0 or newer`,
-          );
-      }
-
-      // 7. csproj AssemblyName must equal id: the loader reads <id>.dll.
+      // 6. csproj AssemblyName must equal id: the loader reads <id>.dll.
       const csproj = findCsproj(modDir);
       let csprojDir = modDir;
       if (!csproj) {
@@ -212,25 +210,46 @@ export default function (pi: ExtensionAPI) {
           );
       }
 
-      // 8. Localization key prefix. BaseLib prefixes model ids with ModId, so every key
-      //    in a mod's loc table starts with "<id>-".
-      const loc = localizationKeys(modDir);
-      for (const bad of loc.badJson) errors.push(`localization/${bad} is not valid JSON`);
-      if (modId) {
-        const stray = loc.keys.filter((k) => !k.toUpperCase().startsWith(`${modId.toUpperCase()}-`));
-        if (stray.length)
-          warnings.push(
-            `${stray.length} localization key(s) do not start with "${modId}-": ${stray.slice(0, 3).join(", ")}${stray.length > 3 ? ", ..." : ""}. Keys without the prefix collide with vanilla keys`,
-          );
+      const wantsPck = manifestData.has_pck === true && cfg.compile?.pck === true;
+      const assetsDir = join(csprojDir, "assets");
+      if (wantsPck && !hasSourceFiles(assetsDir)) {
+        errors.push("has_pck is true, but assets/ is missing or empty. Create assets/ with the files that belong in the PCK");
       }
 
-      // 9. Compile. dotnet comes from check_runtime's cache; the game dir from the path tools.
+      // 7. Framework dependency and localization checks.
+      if (csproj) {
+        const projectText = readFileSync(csproj, "utf8");
+        const deps = Array.isArray(manifestData.dependencies) ? manifestData.dependencies : [];
+        for (const pkg of gameConfig.packages ?? []) {
+          if (!projectText.includes(pkg.id) || !pkg.runtimeId) continue;
+          const dep = deps.find((entry) => (entry as { id?: string }).id === pkg.runtimeId) as
+            | { min_version?: string }
+            | undefined;
+          if (!dep) {
+            errors.push(
+              `the project references ${pkg.id} but the manifest does not declare ${pkg.runtimeId} in dependencies`,
+            );
+          } else if (pkg.version && (!dep.min_version || !isParseableVersion(dep.min_version))) {
+            errors.push(
+              `RitsuLib min_version is ${dep.min_version?.trim() || "missing"}. This harness targets RitsuLib ${pkg.version} or newer`,
+            );
+          } else if (pkg.version && dep.min_version && cmpVersion(dep.min_version, pkg.version) < 0) {
+            errors.push(
+              `RitsuLib min_version is ${dep.min_version}. This harness targets RitsuLib ${pkg.version} or newer`,
+            );
+          }
+        }
+      }
+      const loc = localizationKeys(modDir);
+      for (const bad of loc.badJson) errors.push(`localization/${bad} is not valid JSON`);
+
+      // 8. Compile. dotnet comes from check_runtime's cache; the game dir from the path tools.
       const state = readState(repoRoot);
       const staticOk = errors.length === 0;
       let compilation: "skipped" | "passed" | "failed" = "skipped";
+      let pckBuild: "not-required" | "skipped" | "passed" | "failed" = wantsPck ? "skipped" : "not-required";
       let installedVersion: string | null = null;
 
-      const cfg = readModRepoConfig(repoRoot);
       const gameDir = typeof state.gameDir === "string" ? state.gameDir : null;
       const managedDir =
         typeof state.managedDir === "string" && state.managedDir
@@ -291,6 +310,33 @@ export default function (pi: ExtensionAPI) {
         warnings.push("compilation was skipped because the static checks already failed");
       }
 
+      if (compilation === "passed" && wantsPck) {
+        const pckPath = join(csprojDir, "bin", "Release", `${modId}.pck`);
+        rmSync(pckPath, { force: true });
+        try {
+          const toolProject = join(repoRoot, "tools", "pck-pack", "PckPack.csproj");
+          const toolDll = join(repoRoot, "tools", "pck-pack", "bin", "Release", "net9.0", "pck-pack.dll");
+          await runAsync(dotnet, ["build", toolProject, "-c", "Release", "--nologo", "-v", "quiet"], {
+            cwd: repoRoot,
+            timeoutMs: 300_000,
+          });
+          await runAsync(dotnet, [toolDll, assetsDir, pckPath], {
+            cwd: csprojDir,
+            timeoutMs: 300_000,
+          });
+          if (!existsSync(pckPath)) {
+            pckBuild = "failed";
+            errors.push(`missing ${modId}.pck after PCK build. Check has_pck and assets/`);
+          } else {
+            pckBuild = "passed";
+          }
+        } catch (e) {
+          pckBuild = "failed";
+          const err = e as { stderr?: string; stdout?: string; message?: string };
+          errors.push(`PCK build failed: ${String(err.stderr || err.stdout || err.message).slice(0, 600)}`);
+        }
+      }
+
       // 10. The artifact has to exist with the exact name the loader reads.
       const dllCandidates = modId
         ? [join(csprojDir, `${modId}.dll`), join(csprojDir, "bin", "Release", `${modId}.dll`)]
@@ -318,7 +364,10 @@ export default function (pi: ExtensionAPI) {
       }
 
       // Result.
-      const ok = errors.length === 0 && compilation === "passed";
+      const ok =
+        errors.length === 0 &&
+        compilation === "passed" &&
+        (pckBuild === "not-required" || pckBuild === "passed");
       const status = ok ? "pass" : compilation === "skipped" && errors.length === 0 ? "partial" : "fail";
 
       let nextAction: string;
@@ -328,7 +377,7 @@ export default function (pi: ExtensionAPI) {
       } else if (compilation === "skipped" && errors.length === 0) {
         nextAction =
           "Fix the prerequisite named in the WARN lines, then run validate_mod again so the mod is actually compiled. See the setup-workspace skill.";
-      } else if (errors.some((e) => e.includes("dotnet build failed"))) {
+      } else if (errors.some((e) => e.includes("dotnet build failed") || e.includes("PCK build failed"))) {
         nextAction =
           "Read the compiler error above; it names the file and line. Common fixes are a missing package reference or an API that does not exist in this game build. See the mod-creator skill.";
       } else {
@@ -351,7 +400,7 @@ export default function (pi: ExtensionAPI) {
 
       return {
         content: [{ type: "text", text: truncateLines(lines.join("\n")) }],
-        details: { ok, errors, warnings, compilation, modId, installedVersion },
+        details: { ok, errors, warnings, compilation, pckBuild, modId, installedVersion },
       };
     },
   });

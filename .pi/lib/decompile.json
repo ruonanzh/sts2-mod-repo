@@ -2,10 +2,16 @@
   "version": 1,
   "runtime": "mono",
   "dump": {
-    "assemblies": ["sts2", "baselib"],
-    "paths": { "baselib": "vendor/baselib/BaseLib.dll" },
+    "assemblies": ["sts2", "ritsulib", "ritsulib-runtime", "ritsulib-shared", "ritsulib-ui", "ritsulib-settings"],
+    "paths": {
+      "ritsulib": "vendor/ritsulib/compat/0.107.1/STS2-RitsuLib.dll",
+      "ritsulib-runtime": "vendor/ritsulib/compat/0.107.1/STS2-RitsuLib.Runtime.dll",
+      "ritsulib-shared": "vendor/ritsulib/shared/STS2-RitsuLib.Shared.dll",
+      "ritsulib-ui": "vendor/ritsulib/shared/STS2-RitsuLib.Ui.dll",
+      "ritsulib-settings": "vendor/ritsulib/shared/STS2-RitsuLib.Settings.dll"
+    },
     "skipNestedTypes": true,
     "skipCompilerGenerated": true,
-    "budgetBytes": 25000000
+    "budgetBytes": 50000000
   }
 }

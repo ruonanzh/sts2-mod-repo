@@ -173,10 +173,16 @@ export default function (pi: ExtensionAPI) {
         details: { ok: false, ...details },
       });
 
-      const refreshNote = async (): Promise<string> => {
-        if (freshness.state === "fresh") return "";
+      const refreshNote = async (): Promise<{ text: string; missing: string[] }> => {
+        if (freshness.state === "fresh") return { text: "", missing: [] };
         const built = await rebuild([]);
-        return `# refreshed the dump in ${built.seconds.toFixed(1)}s (${freshness.reasons.join("; ")})\n`;
+        if (built.missing.length) {
+          return {
+            text: `PARTIAL: refreshed the dump in ${built.seconds.toFixed(1)}s, but configured assemblies are missing: ${built.missing.join(", ")}.\n`,
+            missing: built.missing,
+          };
+        }
+        return { text: `# refreshed the dump in ${built.seconds.toFixed(1)}s (${freshness.reasons.join("; ")})\n`, missing: [] };
       };
 
       try {
@@ -229,13 +235,22 @@ export default function (pi: ExtensionAPI) {
             return wrap(`SKIP: the dump is already current (${dir}). Pass force=true to rebuild it anyway.`);
           }
           const built = await rebuild(extra);
-          const added = built.missing.length ? `\n  not found under the game's DLLs: ${built.missing.join(", ")}` : "";
+          const facts = [
+            `  ${dir} (${MB(folderBytes(dir))}, ${built.manifest.contents?.typeFiles ?? "?"} type files)`,
+            `  coverage: ${(built.manifest.assemblies ?? []).map((a) => a.name).join(", ")}`,
+          ];
+          if (built.missing.length) {
+            return failed(
+              [
+                `PARTIAL: rebuilt the dump in ${built.seconds.toFixed(1)}s, but ${built.missing.length} configured assembly(s) are missing: ${built.missing.join(", ")}.`,
+                ...facts,
+                "NEXT: restore the missing configured assemblies, then run inspect_game_code action=dump again.",
+              ].join("\n"),
+              { dir, seconds: built.seconds, reason: "INCOMPLETE_DUMP", missing: built.missing },
+            );
+          }
           return wrap(
-            [
-              `PASS: rebuilt the dump in ${built.seconds.toFixed(1)}s.`,
-              `  ${dir} (${MB(folderBytes(dir))}, ${built.manifest.contents?.typeFiles ?? "?"} type files)`,
-              `  coverage: ${(built.manifest.assemblies ?? []).map((a) => a.name).join(", ")}${added}`,
-            ].join("\n"),
+            [`PASS: rebuilt the dump in ${built.seconds.toFixed(1)}s.`, ...facts].join("\n"),
             { dir, seconds: built.seconds },
           );
         }
@@ -244,7 +259,15 @@ export default function (pi: ExtensionAPI) {
           return failed(`FAIL: action=${params.action} needs target=<name>.`, { reason: "TARGET_MISSING" });
         }
 
-        const note = await refreshNote();
+        const refresh = await refreshNote();
+        if (refresh.missing.length) {
+          return failed(`${refresh.text}NEXT: restore the missing configured assemblies, then run inspect_game_code action=dump again.`, {
+            reason: "INCOMPLETE_DUMP",
+            missing: refresh.missing,
+          });
+        }
+        const respond = (text: string, details: Record<string, unknown>) =>
+          wrap(`${refresh.text}${text}`, details);
         const tree = treeDir(cwd);
 
         if (params.action === "search") {
@@ -253,7 +276,7 @@ export default function (pi: ExtensionAPI) {
           const body = part.hits.length
             ? part.hits.map((h) => (h.line ? `${h.file}:${h.line}  ${h.text}` : `${h.file}`)).join("\n")
             : "0 matches. Try a shorter substring.";
-          return wrap(`${note}${searchHeader(params.target, part.hits.length, files, part.capped)}\n${truncate(body)}`, {
+          return respond(`${searchHeader(params.target, part.hits.length, files, part.capped)}\n${truncate(body)}`, {
             matches: part.hits.length,
             files,
             capped: part.capped,
@@ -270,7 +293,7 @@ export default function (pi: ExtensionAPI) {
         const source = readFileSync(join(tree, rel), "utf8");
 
         if (params.action === "type") {
-          return wrap(`${note}# ${rel}\n\n${truncate(source)}`, { file: rel });
+          return respond(`# ${rel}\n\n${truncate(source)}`, { file: rel });
         }
 
         const found = params.member ? extractMethod(source, params.member, 21) : [];
@@ -285,8 +308,8 @@ export default function (pi: ExtensionAPI) {
             { reason: "METHOD_NOT_FOUND", capped: listed.capped },
           );
         }
-        return wrap(
-          `${note}${bodyHeader(rel, params.member, part.hits.length, part.capped)}\n\n${truncate(
+        return respond(
+          `${bodyHeader(rel, params.member, part.hits.length, part.capped)}\n\n${truncate(
             part.hits.map((b) => b.text).join("\n\n"),
           )}`,
           { methods: part.hits.length, capped: part.capped },
