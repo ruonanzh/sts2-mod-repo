@@ -125,8 +125,8 @@ RitsuLibFramework.CreateContentPack("MyMod")
 
 ## Next Steps
 
-- Registration APIs: [Content authoring](/guide/content-authoring-toolkit)
-- Localization keys: [Localization and keywords](/guide/localization-and-keywords)
-- Characters: [Character and unlock scaffolding](/guide/character-and-unlock-scaffolding)
-- Saves: [Persistence](/guide/persistence-guide)
-- Settings: [Mod settings](/guide/mod-settings)
+- Registration APIs: [Content authoring](content-authoring-toolkit.md)
+- Localization keys: [Localization and keywords](localization-and-keywords.md)
+- Characters: [Character and unlock scaffolding](character-and-unlock-scaffolding.md)
+- Saves: [Persistence](persistence-guide.md)
+- Settings: [Mod settings](mod-settings.md)

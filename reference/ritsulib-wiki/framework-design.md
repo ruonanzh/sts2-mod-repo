@@ -27,7 +27,7 @@ RitsuLib's public API is split by the work a mod author is doing:
 
 ## Recommended Reading Order
 
-1. [Getting started](/guide/getting-started)
-2. [Content authoring](/guide/content-authoring-toolkit)
+1. [Getting started](getting-started.md)
+2. [Content authoring](content-authoring-toolkit.md)
 3. One feature page: character, settings, persistence, audio, or patching
-4. [Diagnostics and compatibility](/guide/diagnostics-and-compatibility) before release
+4. [Diagnostics and compatibility](diagnostics-and-compatibility.md) before release

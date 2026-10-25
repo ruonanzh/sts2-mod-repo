@@ -127,4 +127,4 @@ For normal mod ancient dialogue, write keys like:
 ```
 
 For The Architect, add character-specific keys under `THE_ARCHITECT.talk.<CHARACTER_ENTRY>.*`.
-See [Localization and keywords](/guide/localization-and-keywords#ancient-dialogue) for the full key shape.
+See [Localization and keywords](localization-and-keywords.md#ancient-dialogue) for the full key shape.

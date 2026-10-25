@@ -2,6 +2,18 @@
 
 This page covers the pinned RitsuLib contract. Use `reference/ritsulib-wiki/INDEX.md` for the full upstream guide.
 
+## Research before implementation
+
+The accepted references cover only their demonstrated behavior. For another behavior:
+
+1. Read the relevant page through `reference/ritsulib-wiki/INDEX.md`.
+2. Use `inspect_game_api dll=game` for vanilla types and signatures.
+3. Use `inspect_game_api dll=ritsulib` for framework types and signatures.
+4. Use `inspect_game_code` for implementations and call sites.
+5. Read results under `cs/sts2/` for game code and `cs/ritsulib-*` for framework code.
+
+Use the pinned assemblies when the Wiki and code disagree. Do not copy a signature without checking how it is used.
+
 ## Version and dependencies
 
 The current targets are game 0.107.1 and RitsuLib 0.6.10.

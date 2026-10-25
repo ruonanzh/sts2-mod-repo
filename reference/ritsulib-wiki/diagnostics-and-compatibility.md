@@ -27,7 +27,7 @@ For interactive debugging, RitsuLib can also host a browser-based live log viewe
 
 Use loopback mode for normal development. Enable LAN access only when another device on the same network needs the viewer, and treat the tokenized URL as session-local access data.
 
-See [Debug log viewer](/guide/debug-log-viewer) for setup and usage details.
+See [Debug log viewer](debug-log-viewer.md) for setup and usage details.
 
 
 ## Missing Character Saves

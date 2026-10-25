@@ -106,6 +106,6 @@ Common rule helpers:
 
 ## Related Pages
 
-- [Timeline and unlocks](/guide/timeline-and-unlocks)
-- [Asset profiles and fallbacks](/guide/asset-profiles-and-fallbacks)
-- [Creature visuals and animation](/guide/creature-visuals-and-animation)
+- [Timeline and unlocks](timeline-and-unlocks.md)
+- [Asset profiles and fallbacks](asset-profiles-and-fallbacks.md)
+- [Creature visuals and animation](creature-visuals-and-animation.md)

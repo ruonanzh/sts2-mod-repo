@@ -56,11 +56,11 @@ export default function (pi: ExtensionAPI) {
       "Read the exact type and member names, the C#, the IL, and the string literals of every assembly the repository declares: the game (sts2.dll) and the pinned RitsuLib modules. The five actions are search, members, decompile, il, and strings. search finds types and members whose name contains the target. members lists one type's members and its base chain. decompile turns one type or member into C#. il turns one type or method into IL. strings lists string literals. Results are tagged with the assembly they came from. Use it before writing code that touches a game or RitsuLib type, because a guessed name fails at build time with CS0246 or CS0012, which does not say whether the name is wrong or an assembly is missing. It reads the assemblies on disk and never loads or runs the game.",
     promptSnippet: "Look up exact type and member names across the game and RitsuLib before writing mod code",
     promptGuidelines: [
-      "Call inspect_game_api before you write code that touches a game or RitsuLib type. Do not guess names. The game and RitsuLib assemblies carry different parts of what a card needs.",
+      "Call inspect_game_api before using an unfamiliar game or RitsuLib type or member. Do not guess names. The game and RitsuLib assemblies carry different parts of what a card needs.",
       "Use action=search with a short substring. It matches both type names and member names, so searching for a method such as PortraitPath works and tells you which type owns it.",
       "Use action=members to see a type's base chain. A RitsuLib type derives from a game type, so a hit tagged ritsulib almost always means sts2.dll is needed too. members shows this directly.",
       "A hit tagged ritsulib also means the mod must reference the RitsuLib package and declare STS2-RitsuLib in the manifest dependencies.",
-      "A type can sit in any declared assembly. If a lookup misses, try dll=game or dll=ritsulib before you decide the type does not exist. A miss from search never proves that nothing uses a name; that needs a call-site, which is what the decompiled dump is for.",
+      "A type can sit in any declared assembly. Use dll=game for vanilla APIs and dll=ritsulib for framework APIs. Leave dll=all when the owner is unknown. If a lookup misses, try a specific source before you decide the type does not exist. A miss from search never proves that nothing uses a name; that needs a call-site, which is what the decompiled dump is for.",
       "When you learn something this way, write the fact and the target you used into docs/, so the next session does not repeat it.",
     ],
     parameters: Type.Object({

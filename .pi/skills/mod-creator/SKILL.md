@@ -11,10 +11,16 @@ description: 'Use when the player wants to make or change a mod. Covers requirem
 
 Get one clear sentence from the player. Identify the content type, gameplay behavior, languages, and assets.
 
+## 2. Research the request
+
+MUST use the player's request to select relevant pages from `reference/ritsulib-wiki/INDEX.md`. MUST read the selected pages before implementation. Do not read the whole snapshot.
+
 Choose the reference:
 
 - Use `reference/example_mod/` for an official-loader patch without RitsuLib.
 - Use `reference/example_card/` for a RitsuLib card.
+- Use `reference/example_relic/` for a RitsuLib relic.
+- Use `reference/example_power/` for a RitsuLib power.
 - Use `reference/example_potion/` for a RitsuLib potion.
 - For another capability, first check whether a working reference and capability SKILL exist.
 
@@ -22,7 +28,7 @@ MUST study the chosen reference before implementation. Use it to understand a wo
 
 Do not invent a supported capability from a template name alone.
 
-## 2. Read the capability procedure
+## 3. Read the capability procedure
 
 For a card, stop here and complete `.pi/skills/add-card/SKILL.md`.
 
@@ -36,13 +42,11 @@ For a combined mod, apply each capability to its item in the same mod directory.
 
 The remaining steps are for other mods.
 
-For another task, read `reference/ritsulib-wiki/INDEX.md`. Choose only the relevant upstream pages. Check the pinned API with `inspect_game_api` before writing code.
-
 For a non-card mod, use `mod-page` before implementation when the player must choose a scope, values, or between options.
 
 Read `docs/ritsulib.md` for framework rules and `docs/pck.md` for packaged resources.
 
-## 3. Create the mod
+## 4. Create the mod
 
 Create a new project in `your_mods/<mod name>/` or adapt the chosen reference when useful. Change the assembly name, namespace, manifest file name, and manifest id together.
 
@@ -56,7 +60,7 @@ Declare the runtime dependency when the project references RitsuLib:
 
 Use `has_pck: true` only when the mod has packaged resources. Put source assets under `assets/`.
 
-## 4. Implement the behavior
+## 5. Implement the behavior
 
 Register the assembly with `ModTypeDiscoveryHub` when using attribute registration. Use attributes or one content pack, not both for the same model.
 
@@ -64,7 +68,7 @@ Check every unfamiliar type or member with `inspect_game_api`. Use `inspect_game
 
 Keep game-only patches separate from framework registration. Do not register the same model twice.
 
-## 5. Validate
+## 6. Validate
 
 Run `validate_mod modDir=your_mods/<mod name>`.
 

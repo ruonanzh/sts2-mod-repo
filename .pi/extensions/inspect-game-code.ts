@@ -32,10 +32,10 @@ export default function (pi: ExtensionAPI) {
     name: "inspect_game_code",
     label: "Inspect Game Code",
     description:
-      "Read the game's code from the local decompiled dump: one file per top-level type, so a whole-tree question is one search. Actions: status, search, type, body, dump. The dump is rebuilt automatically when the game's DLLs or the config changed. Use inspect_game_api to ask about one type without a dump, or to read IL and string literals.",
-    promptSnippet: "Read game code from the local dump (whole-tree search, one type, one member)",
+      "Read game and RitsuLib code from the local decompiled dump: one file per top-level type, so a whole-tree question is one search. Actions: status, search, type, body, dump. The dump is rebuilt automatically when the game's DLLs or the config changed. Use inspect_game_api to ask about one type without a dump, or to read IL and string literals.",
+    promptSnippet: "Read game and RitsuLib code from the local dump (whole-tree search, one type, one member)",
     promptGuidelines: [
-      "Use inspect_game_code to search the dumped tree, read one type, or read one member. Use inspect_game_api for IL, string literals, or a type the dump does not cover.",
+      "Use inspect_game_code to search the dumped tree, read one type, or read one member. Read results under cs/sts2/ for game code and cs/ritsulib-* for RitsuLib code. Use the result path to identify the source assembly. Use inspect_game_api for IL, string literals, or a type the dump does not cover.",
       "inspect_game_code search lists files and lines. type returns a whole file. body returns one member with its braces balanced. Prefer search when you do not know the file, and type when you do.",
       "inspect_game_code rebuilds the dump by itself when the game's DLLs or decompile.json changed, and says in the result when it ran and how long it took. Do not rebuild the dump some other way.",
       "inspect_game_code dump writes the assemblies in decompile.json. Pass assemblies= to add one for this dump; a wider set costs disk and time.",

@@ -31,7 +31,7 @@ This repository is the modding environment for Slay the Spire 2. Create player m
 ## Rules
 
 1. Write only inside `your_mods/<mod name>/`.
-2. Use `inspect_game_api` or `inspect_game_code` before using an unfamiliar type or member. Do not guess API names.
+2. Check exact types and signatures with `inspect_game_api`. Use `dll=game` for vanilla APIs and `dll=ritsulib` for framework APIs. Use `inspect_game_code` for implementations and call sites. Its result paths identify game and RitsuLib assemblies. Do not guess APIs or behavior.
 3. Use RitsuLib for new content unless the task needs only the official loader. Declare `STS2-RitsuLib` in the manifest when the project references it.
 4. Set `has_pck` only when the mod needs packaged resources. Put source assets under `assets/`. No Godot editor is needed.
 5. Run `validate_mod` after a source or manifest change. A PARTIAL result is not valid.

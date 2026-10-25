@@ -42,4 +42,4 @@ Replayable events are delivered immediately to late subscribers by default. Pass
 
 `CardRetainedEvent` is obsolete on newer host APIs. Use `CardsFlushedEvent` when you need retained and flushed cards together.
 
-For game API differences that affect event availability, check [Diagnostics and compatibility](/guide/diagnostics-and-compatibility).
+For game API differences that affect event availability, check [Diagnostics and compatibility](diagnostics-and-compatibility.md).

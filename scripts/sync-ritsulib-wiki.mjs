@@ -105,11 +105,15 @@ function englishSections(text) {
   return `${output.join("\n").trim()}\n`;
 }
 
+function localGuideLinks(text) {
+  return text.replace(/\]\(\/guide\/([a-z0-9-]+)(#[^)]+)?\)/g, (_match, page, anchor = "") => `](${page}.md${anchor})`);
+}
+
 const fetched = new Map();
 for (const [rel, file] of [...upstream.entries()].sort()) {
   // Our hand-written INDEX.md replaces the upstream index on every filesystem.
   if (rel === "index.md") continue;
-  const english = englishSections(file.body);
+  const english = localGuideLinks(englishSections(file.body));
   if (!english.trim()) throw new Error(`no English sections found in ${rel}`);
   const prose = english.replace(/```[\s\S]*?```/g, "");
   if (/[\u3400-\u9fff]/u.test(prose)) throw new Error(`non-English prose remains in ${rel}`);
