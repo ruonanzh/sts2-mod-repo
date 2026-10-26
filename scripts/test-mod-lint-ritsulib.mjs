@@ -24,7 +24,7 @@ function copyWithTsExtensions(from, to) {
   walk(to);
 }
 
-async function setup({ repoPck = true, modPck = true, assets = "valid", dependencies = "valid", stale = false, fixture = "ritsulib_probe", powerKeys = "valid", cardKeys = "valid", relicKeys = "valid", badAssetJson = false, ownerMismatch = false, inheritedPower = false, primitiveAssetJson = false } = {}) {
+async function setup({ repoPck = true, modPck = true, assets = "valid", dependencies = "valid", stale = false, fixture = "ritsulib_probe", powerKeys = "valid", cardKeys = "valid", relicKeys = "valid", badAssetJson = false, ownerMismatch = false, inheritedPower = false, primitiveAssetJson = false, missingRitsuUsing = false, compilerNoise = false, unknownName = false } = {}) {
   const root = mkdtempSync(join(repoRoot, ".lint-ritsu-"));
   copyWithTsExtensions(join(repoRoot, ".pi"), join(root, ".pi"));
   cpSync(join(repoRoot, "tools", "pck-pack"), join(root, "tools", "pck-pack"), { recursive: true });
@@ -75,6 +75,28 @@ public abstract class BasePower : ModPowerTemplate
 public sealed class Momentum : BasePower { }
 `);
     for (const lang of ["eng", "zhs"]) rmSync(join(modDir, "assets", "ExamplePower", "localization", lang, "powers.json"));
+  }
+  if (missingRitsuUsing && fixture === "example_power") {
+    const path = join(modDir, "Momentum.cs");
+    writeFileSync(path, readFileSync(path, "utf8").replace("using STS2RitsuLib.Scaffolding.Content;\n", ""));
+  }
+  if (compilerNoise && fixture === "example_power") {
+    const conversions = Array.from({ length: 14 }, (_, index) => `int e${index} = "bad";`).join("\n    ");
+    writeFileSync(join(modDir, "CompilerErrors.cs"), `namespace ExamplePower;
+internal static class CompilerErrors
+{
+    private static void TakesGuid(System.Guid value) { }
+    private static void Trigger()
+    {
+        ${conversions}
+        TakesGuid("bad");
+    }
+}
+`);
+  }
+  if (unknownName && fixture === "example_power") {
+    const path = join(modDir, "Entry.cs");
+    writeFileSync(path, readFileSync(path, "utf8").replace("var assembly = Assembly.GetExecutingAssembly();", "MissingRitsuName.Do();\n        var assembly = Assembly.GetExecutingAssembly();"));
   }
   if (fixture === "example_power" && powerKeys !== "valid") {
     for (const lang of ["eng", "zhs"]) {
@@ -212,6 +234,18 @@ await caseRun("renamed Power with stale registration owner", { fixture: "example
 });
 await caseRun("inherited Power without localization table", { fixture: "example_power", inheritedPower: true }, ({ text, details }) => {
   check("inherited Power returns not-checked with a visible warning", details.ok && details.powerLocalization === "not-checked" && text.includes("Content Pack or inherited registrations need a runtime localization check"), text);
+});
+await caseRun("missing RitsuLib namespace", { fixture: "example_power", missingRitsuUsing: true }, ({ text, details }) => {
+  check("missing RitsuLib using fails compilation", !details.ok && details.compilation === "failed" && text.includes("error CS0246") && text.includes("Momentum.cs"), text);
+  check("namespace failure names RitsuLib and game API lookup", text.includes("NEXT: Check missing using directives and assembly references. Use inspect_game_api dll=ritsulib for RitsuLib types and dll=game for game types, then rerun validate_mod."), text);
+});
+await caseRun("many unrelated compiler errors", { fixture: "example_power", compilerNoise: true }, ({ text, details }) => {
+  check("late compiler errors remain visible", !details.ok && details.compilation === "failed" && text.includes("error CS1503"), text);
+  check("unrelated compiler errors keep generic NEXT", text.includes("NEXT: Read the compiler error above") && !text.includes("NEXT: Check missing using directives"), text);
+});
+await caseRun("unknown name without missing using", { fixture: "example_power", unknownName: true }, ({ text, details }) => {
+  check("CS0103 remains visible", !details.ok && details.compilation === "failed" && text.includes("error CS0103") && text.includes("MissingRitsuName"), text);
+  check("CS0103 alone keeps generic NEXT", text.includes("NEXT: Read the compiler error above") && !text.includes("NEXT: Check missing using directives"), text);
 });
 
 const failed = results.filter((result) => !result.ok);

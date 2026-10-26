@@ -28,6 +28,23 @@ function truncateLines(text: string, maxLines = 200): string {
   return `${lines.slice(0, maxLines).join("\n")}\n... (${lines.length - maxLines} more lines truncated)`;
 }
 
+function summarizeBuildFailure(err: { stderr?: string; stdout?: string; message?: string }): { text: string; namespaceIssue: boolean } {
+  const output = [err.stdout, err.stderr, err.message].filter(Boolean).join("\n");
+  const lines = output.split("\n");
+  const diagnostics = [...new Set(lines.filter((line) => /\berror\s+CS\d{4}:/.test(line)))];
+  const codes = new Set([...output.matchAll(/\berror\s+(CS\d{4}):/g)].map((match) => match[1]));
+  const head = diagnostics.slice(0, 12);
+  const tail = diagnostics.slice(Math.max(12, diagnostics.length - 4));
+  const hidden = diagnostics.length - head.length - tail.length;
+  const shown = [...head];
+  if (hidden > 0) shown.push(`... (${hidden} more C# errors)`);
+  shown.push(...tail);
+  return {
+    text: shown.length ? shown.join("\n") : output.trim().slice(-2000),
+    namespaceIssue: ["CS0246", "CS0012", "CS0234"].some((code) => codes.has(code)),
+  };
+}
+
 /** Compare dotted versions; returns negative / zero / positive. */
 function cmpVersion(a: string, b: string): number {
   const pa = a.replace(/^v/i, "").split(".").map((n) => parseInt(n, 10) || 0);
@@ -284,6 +301,7 @@ export default function (pi: ExtensionAPI) {
       const state = readState(repoRoot);
       const staticOk = errors.length === 0;
       let compilation: "skipped" | "passed" | "failed" = "skipped";
+      let namespaceCheckNeeded = false;
       let pckBuild: "not-required" | "skipped" | "passed" | "failed" = wantsPck ? "skipped" : "not-required";
       let installedVersion: string | null = null;
 
@@ -339,9 +357,9 @@ export default function (pi: ExtensionAPI) {
         } catch (e) {
           compilation = "failed";
           const err = e as { stderr?: string; stdout?: string; message?: string };
-          errors.push(
-            `dotnet build failed: ${String(err.stderr || err.stdout || err.message).slice(0, 600)}`,
-          );
+          const failure = summarizeBuildFailure(err);
+          namespaceCheckNeeded = failure.namespaceIssue;
+          errors.push(`dotnet build failed:\n${failure.text}`);
         }
       } else if (!staticOk) {
         warnings.push("compilation was skipped because the static checks already failed");
@@ -414,6 +432,9 @@ export default function (pi: ExtensionAPI) {
       } else if (compilation === "skipped" && errors.length === 0) {
         nextAction =
           "Fix the prerequisite named in the WARN lines, then run validate_mod again so the mod is actually compiled. See the setup-workspace skill.";
+      } else if (namespaceCheckNeeded) {
+        nextAction =
+          "Check missing using directives and assembly references. Use inspect_game_api dll=ritsulib for RitsuLib types and dll=game for game types, then rerun validate_mod.";
       } else if (errors.some((e) => e.includes("dotnet build failed") || e.includes("PCK build failed"))) {
         nextAction =
           "Read the compiler error above; it names the file and line. Common fixes are a missing package reference or an API that does not exist in this game build. See the mod-creator skill.";
