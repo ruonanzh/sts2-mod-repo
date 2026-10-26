@@ -27,7 +27,7 @@ public sealed class AegisShard : ModRelicTemplate
     public override RelicAssetProfile AssetProfile => new(
         "res://ExampleRelic/images/relics/aegis_shard.png",
         "res://ExampleRelic/images/relics/aegis_shard.png",
-        "res://ExampleRelic/images/relics/aegis_shard.png");
+        "res://ExampleRelic/images/relics/aegis_shard_big.png");
 
     public override async Task BeforeCombatStart()
     {

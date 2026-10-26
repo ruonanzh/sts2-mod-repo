@@ -55,13 +55,23 @@ assert.deepEqual(chinesePowers, {
   "EXAMPLE_POWER_POWER_MOMENTUM.description": "每打出一张攻击牌，获得 {Amount} 点格挡。",
 });
 
+for (const [file, width, height, colorType] of [["momentum.png", 128, 128, 6], ["momentum_big.png", 256, 256, 6]]) {
+  const png = readFileSync(join(mod, "assets", "ExamplePower", "images", "powers", file));
+  assert.equal(png.readUInt32BE(16), width);
+  assert.equal(png.readUInt32BE(20), height);
+  assert.equal(png[25], colorType);
+}
+const cardPng = readFileSync(join(mod, "assets", "ExamplePower", "images", "cards", "build_momentum.png"));
+assert.equal(cardPng[25], 2);
+
 const output = execFileSync("bun", [
   "scripts/dev-harness.mjs", ".pi/extensions/mod-lint.ts", "validate_mod", '{"modDir":"reference/example_power"}',
 ], { cwd: root, encoding: "utf8" });
 assert.match(output, /PASS: example_power is valid and compiled/);
 assert.match(output, /"pckBuild": "passed"/);
 const entries = readPckEntries(join(mod, "bin", "Release", "ExamplePower.pck"));
-for (const sourcePng of ["ExamplePower/images/cards/build_momentum.png", "ExamplePower/images/powers/momentum.png"]) {
+assert.ok(power.includes("momentum_big.png"));
+for (const sourcePng of ["ExamplePower/images/cards/build_momentum.png", "ExamplePower/images/powers/momentum.png", "ExamplePower/images/powers/momentum_big.png"]) {
   const digest = createHash("md5").update(`res://${sourcePng}`).digest("hex");
   const leaf = sourcePng.split("/").at(-1);
   assert.ok(entries.has(`.godot/imported/${leaf}-${digest}.ctex`));

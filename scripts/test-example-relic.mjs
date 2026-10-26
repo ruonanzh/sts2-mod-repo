@@ -43,6 +43,7 @@ assert.deepEqual(manifest.dependencies, [{ id: "STS2-RitsuLib", min_version: "0.
 assert.ok(relic.includes("RegisterRelic(typeof(IroncladRelicPool)"));
 assert.ok(relic.includes("FullPublicEntry = PublicEntry") && relic.includes("EXAMPLE_RELIC_AEGIS_SHARD"));
 assert.ok(relic.includes("ModRelicTemplate") && relic.includes("RelicAssetProfile"));
+assert.ok(relic.includes("aegis_shard_big.png"));
 assert.ok(relic.includes("BeforeCombatStart") && relic.includes("CreatureCmd.GainBlock"));
 assert.ok(relic.includes("BlockVar(4m, ValueProp.Unpowered)"));
 assert.ok(starter.includes("Ironclad.StartingRelics") && starter.includes("ModelDb.Relic<AegisShard>()"));
@@ -56,6 +57,13 @@ assert.deepEqual(chinese, {
   "EXAMPLE_RELIC_AEGIS_SHARD.description": "战斗开始时，获得 {Block} 点格挡。",
 });
 
+for (const [file, width, height] of [["aegis_shard.png", 128, 128], ["aegis_shard_big.png", 256, 256]]) {
+  const png = readFileSync(join(mod, "assets", "ExampleRelic", "images", "relics", file));
+  assert.equal(png.readUInt32BE(16), width);
+  assert.equal(png.readUInt32BE(20), height);
+  assert.equal(png[25], 6);
+}
+
 const output = execFileSync("bun", [
   "scripts/dev-harness.mjs", ".pi/extensions/mod-lint.ts", "validate_mod", '{"modDir":"reference/example_relic"}',
 ], { cwd: root, encoding: "utf8" });
@@ -66,6 +74,10 @@ const sourcePng = "ExampleRelic/images/relics/aegis_shard.png";
 const digest = createHash("md5").update(`res://${sourcePng}`).digest("hex");
 assert.ok(entries.has(`.godot/imported/aegis_shard.png-${digest}.ctex`));
 assert.ok(entries.has(`${sourcePng}.import`));
+const bigPng = "ExampleRelic/images/relics/aegis_shard_big.png";
+const bigDigest = createHash("md5").update(`res://${bigPng}`).digest("hex");
+assert.ok(entries.has(`.godot/imported/aegis_shard_big.png-${bigDigest}.ctex`));
+assert.ok(entries.has(`${bigPng}.import`));
 assert.deepEqual(JSON.parse(entries.get("ExampleRelic/localization/eng/relics.json").toString("utf8")), english);
 assert.deepEqual(JSON.parse(entries.get("ExampleRelic/localization/zhs/relics.json").toString("utf8")), chinese);
 console.log("PASS: example_relic registers a pinned RitsuLib relic with exact art, text, and combat-start Block");

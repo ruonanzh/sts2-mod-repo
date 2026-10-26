@@ -23,7 +23,7 @@ public sealed class Momentum : ModPowerTemplate
 
     public override PowerAssetProfile AssetProfile => new(
         "res://ExamplePower/images/powers/momentum.png",
-        "res://ExamplePower/images/powers/momentum.png");
+        "res://ExamplePower/images/powers/momentum_big.png");
 
     public override async Task AfterCardPlayed(PlayerChoiceContext choiceContext, CardPlay cardPlay)
     {

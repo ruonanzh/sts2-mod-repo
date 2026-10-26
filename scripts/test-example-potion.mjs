@@ -62,6 +62,11 @@ assert.deepEqual(chinese, {
   "EXAMPLE_POTION_AEGIS_DRAUGHT.selectionScreenPrompt": "选择一名玩家，使其获得 {Block} 点格挡。",
 });
 
+const iconPng = readFileSync(join(mod, "assets", "ExamplePotion", "images", "potions", "aegis_draught.png"));
+assert.equal(iconPng.readUInt32BE(16), 128);
+assert.equal(iconPng.readUInt32BE(20), 128);
+assert.equal(iconPng[25], 6);
+
 const output = execFileSync("bun", [
   "scripts/dev-harness.mjs", ".pi/extensions/mod-lint.ts", "validate_mod", '{"modDir":"reference/example_potion"}',
 ], { cwd: root, encoding: "utf8" });

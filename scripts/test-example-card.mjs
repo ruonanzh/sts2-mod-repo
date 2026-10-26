@@ -52,6 +52,9 @@ assert.deepEqual(chinese, {
   "EXAMPLE_CARD_FOCUSED_STRIKE.description": "造成 {Damage} 点伤害。",
 });
 
+const cardPng = readFileSync(join(mod, "assets", "ExampleCard", "images", "cards", "focused_strike.png"));
+assert.equal(cardPng[25], 2);
+
 const output = execFileSync("bun", [
   "scripts/dev-harness.mjs", ".pi/extensions/mod-lint.ts", "validate_mod", '{"modDir":"reference/example_card"}',
 ], { cwd: root, encoding: "utf8" });
