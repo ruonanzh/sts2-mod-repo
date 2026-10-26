@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -39,6 +39,10 @@ try {
 
   await assert.rejects(execute({ action: "fit", in: "source.png", width: 10, height: 10 }), /INVALID_ARGS: action=fit needs out/);
 
+  assert.equal(existsSync(join(cwd, "asset_manifest.jsonl")), false);
+  await execute({ action: "fit", in: "source.png", out: "your_mods/demo/.preview/fit.png", width: 100, height: 76 });
+  assert.equal(existsSync(join(cwd, "your_mods", "demo", "asset_manifest.jsonl")), false);
+
   const mismatch = await execute({ action: "check", file: "source.png", width: 99, height: 99 });
   assert.match(text(mismatch), /FAIL: SIZE_MISMATCH/);
   assert.match(text(mismatch), /NEXT: run fit/);
@@ -67,21 +71,72 @@ try {
     throw new Error(`unexpected ${value}`);
   };
   const prompt = "the player's exact prompt, with any style";
-  const generated = await execute({ action: "generate", prompt, out: ".preview/generated.png" });
+  const generated = await execute({ action: "generate", prompt, out: "your_mods/demo/.preview/generated.png" });
   assert.match(text(generated), /PASS: .*generated.png written at 32x32, task tool-task/);
   assert.equal(bodies[0].prompt, prompt);
   assert.equal(generationCalls, 1);
+  const manifestPath = join(cwd, "your_mods", "demo", "asset_manifest.jsonl");
+  const records = () => readFileSync(manifestPath, "utf8").trimEnd().split("\n").map((line) => JSON.parse(line));
+  const first = records()[0];
+  assert.equal(first.endpoint, "/v3/generation/text-to-image");
+  assert.equal(first.name, "generated");
+  assert.equal(first.request_id, "tool-task");
+  assert.deepEqual(first.files, [".preview/generated.png"]);
+  assert.equal(first.input.prompt, prompt);
+  assert.equal(first.input.model, "chat_image_2.5_flare");
+  assert.equal(first.input.output_format, "png");
+  assert.equal(first.error, undefined);
+  assert.doesNotMatch(readFileSync(manifestPath, "utf8"), /test-key|base64/);
 
   writeFileSync(join(cwd, "keep.png"), "keep");
   await assert.rejects(execute({ action: "generate", prompt: "do not call", out: "keep.png" }), /OUT_FILE_EXISTS/);
   assert.equal(generationCalls, 1);
 
   await Promise.all([
-    execute({ action: "generate", prompt: "first", out: ".preview/first.png" }),
-    execute({ action: "generate", prompt: "second", out: ".preview/second.png" }),
+    execute({ action: "generate", prompt: "first", out: "your_mods/demo/.preview/first.png" }),
+    execute({ action: "generate", prompt: "second", out: "your_mods/demo/.preview/second.png" }),
   ]);
   assert.equal(generationCalls, 3);
   assert.equal(maxActive, 1);
+  assert.equal(records().length, 3);
+
+  const workingFetch = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => String(url) === "https://img.test/tool.png"
+    ? new Response("missing", { status: 503 })
+    : workingFetch(url, init);
+  const failed = await execute({ action: "generate", prompt: "failure", out: "your_mods/demo/.preview/failed.png" });
+  assert.match(text(failed), /FAIL: DOWNLOAD_FAILED/);
+  const failure = records().at(-1);
+  assert.equal(failure.request_id, "tool-task");
+  assert.deepEqual(failure.files, []);
+  assert.match(failure.error, /DOWNLOAD_FAILED/);
+  globalThis.fetch = workingFetch;
+
+  const reused = await execute({ action: "generate", task: "reuse-task", out: "your_mods/demo/.preview/reused.png" });
+  assert.match(text(reused), /task reuse-task/);
+  const reuse = records().at(-1);
+  assert.equal(reuse.endpoint, "/v3/tasks/reuse-task");
+  assert.equal(reuse.request_id, "reuse-task");
+  assert.deepEqual(reuse.input, { task: "reuse-task" });
+
+  writeFileSync(join(cwd, "your_mods", "demo", ".preview", "blocker"), "file");
+  const writeFailure = await execute({ action: "generate", prompt: "write failure", out: "your_mods/demo/.preview/blocker/out.png" });
+  assert.match(text(writeFailure), /FAIL: WRITE_FAILED/);
+  assert.match(text(writeFailure), /NEXT: reuse task=tool-task/);
+  const writeRecord = records().at(-1);
+  assert.equal(writeRecord.request_id, "tool-task");
+  assert.match(writeRecord.error, /WRITE_FAILED/);
+
+  mkdirSync(join(cwd, "ref-directory"));
+  const readFailure = await execute({ action: "generate", prompt: "read failure", refs: ["ref-directory"], out: "your_mods/demo/.preview/read-failed.png" });
+  assert.match(text(readFailure), /FAIL: READ_FAILED/);
+  assert.match(records().at(-1).error, /READ_FAILED/);
+
+  mkdirSync(join(cwd, "your_mods", "warn", ".preview"), { recursive: true });
+  mkdirSync(join(cwd, "your_mods", "warn", "asset_manifest.jsonl"));
+  const manifestWarning = await execute({ action: "generate", prompt: "warning", out: "your_mods/warn/.preview/warning.png" });
+  assert.match(text(manifestWarning), /PASS: .*warning.png/);
+  assert.match(text(manifestWarning), /WARN: could not write asset_manifest.jsonl/);
 
   const smoke = execFileSync("bun", [
     "scripts/dev-harness.mjs",

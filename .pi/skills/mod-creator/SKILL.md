@@ -26,6 +26,8 @@ Choose the reference:
 
 MUST study the chosen reference before implementation. Use it to understand a working project and its verified patterns.
 
+When a mod needs generated or resized art, use `2d-art` for previews, fitting, and image checks before `validate_mod`.
+
 Do not invent a supported capability from a template name alone.
 
 ## 3. Read the capability procedure

@@ -61,6 +61,7 @@ try {
   }));
   writeFileSync(join(modDir, "MyMod.dll"), "mod");
   writeFileSync(join(modDir, "MyMod.pck"), "pck");
+  writeFileSync(join(modDir, "asset_manifest.jsonl"), "{\"audit\":true}\n");
 
   const { default: register } = await import(pathToFileURL(join(tmp, ".pi", "extensions", "mod-install.ts")).href);
   let tool;
@@ -83,6 +84,7 @@ try {
   check("compat runtime directory is preserved", existsSync(join(installed, "compat", "0.107.1", "STS2-RitsuLib.Runtime.dll")), first.text);
   check("repository docs are not installed", !existsSync(join(installed, "README.md")) && !existsSync(join(installed, "LICENSE.txt")), first.text);
   check("consumer mod and PCK are installed", existsSync(join(modsRoot, "MyMod", "MyMod.dll")) && existsSync(join(modsRoot, "MyMod", "MyMod.pck")), first.text);
+  check("asset manifest is not installed", !existsSync(join(modsRoot, "MyMod", "asset_manifest.jsonl")), first.text);
   check("recursive dependencies are installed", existsSync(join(modsRoot, "ChildLib", "ChildLib.dll")) && existsSync(join(modsRoot, "GrandChildLib", "GrandChildLib.dll")), first.text);
   check("cyclic dependencies terminate", /GrandChildLib/.test(first.text), first.text);
 

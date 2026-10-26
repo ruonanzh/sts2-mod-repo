@@ -1,6 +1,8 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "typebox";
-import { checkImage, checkRefs, fitImage, generateImage, ImageError, type ImageResult } from "../lib/image-2d";
+import { basename } from "node:path";
+import { checkImage, checkRefs, fitImage, generateImage, IMAGE_MODEL, ImageError, type ImageResult } from "../lib/image-2d";
+import { appendManifest, manifestRec, modRootOf, relToModRoot } from "../lib/asset-manifest";
 import { serialize } from "../lib/proc";
 import { resolveUserPath } from "../lib/game-paths";
 
@@ -27,15 +29,54 @@ function passText(action: string, result: ImageResult): string {
   return `PASS: all ${result.present} expected picture(s) are present`;
 }
 
+function warnLine(warning: string | null): string {
+  return warning ? `\nWARN: ${warning}` : "";
+}
+
+interface GenerationAudit {
+  cwd: string;
+  out: string;
+  prompt?: string;
+  refs: string[];
+  background?: string;
+  reuseTask?: string;
+  taskId: string | null;
+  error?: ImageError;
+}
+
+function recordGeneration(input: GenerationAudit): string | null {
+  const modRoot = modRootOf(input.cwd, input.out);
+  const rel = (file: string) => relToModRoot(modRoot, file);
+  const fields: Record<string, unknown> = input.reuseTask
+    ? { task: input.reuseTask }
+    : {
+        prompt: input.prompt,
+        model: IMAGE_MODEL,
+        background: input.background ?? "transparent",
+        output_format: "png",
+      };
+  if (input.refs.length) fields.refs = input.refs.map(rel);
+  return appendManifest(modRoot, manifestRec({
+    endpoint: input.reuseTask ? `/v3/tasks/${input.reuseTask}` : input.refs.length ? "/v3/generation/image-to-image" : "/v3/generation/text-to-image",
+    name: basename(input.out).replace(/\.[^.]+$/, ""),
+    request_id: input.taskId,
+    parent_request_id: null,
+    seed: null,
+    files: input.error ? [] : [rel(input.out)],
+    input: fields,
+    error: input.error ? `${input.error.code}: ${input.error.message}` : undefined,
+  }));
+}
+
 export default function (pi: ExtensionAPI) {
   pi.registerTool({
     name: "generate_2d_asset",
     label: "Generate 2D Asset",
     description:
-      "Generate a PNG from a player prompt and optional reference pictures, reuse an existing Tripo task, fit a PNG to exact dimensions, check PNG dimensions and alpha preferences, or list missing references. Actions: generate, fit, check, refs. The tool never adds style wording, never overwrites an existing output, and never edits game records. Generation spends Tripo credits unless task= is used.",
+      "Generate a PNG from a player prompt and optional reference pictures, reuse an existing Tripo task, fit a PNG to exact dimensions, check PNG dimensions and alpha preferences, or list missing references. Actions: generate, fit, check, refs. The tool never adds style wording, never overwrites an existing output, and never edits game state. Generation spends Tripo credits unless task= is used.",
     promptSnippet: "Generate, fit, or check a 2D PNG without adding style wording",
     promptGuidelines: [
-      "Use generate_2d_asset with action=generate for a player-approved prompt. Write previews to your_mods/<mod>/.preview/. The tool sends the prompt unchanged and adds no style wording.",
+      "Use generate_2d_asset with action=generate for a player-approved prompt. Generation attempts are recorded in the mod's asset_manifest.jsonl. A recording failure adds a warning and does not discard the image. Write previews to your_mods/<mod>/.preview/. The tool sends the prompt unchanged and adds no style wording.",
       "Use generate_2d_asset with outputAlpha=opaque for default card art and outputAlpha=preserve for icons. The check actions alpha=avoid and alpha=prefer only recommend solid cards or transparent icons. They do not reject valid PNG files.",
       "Use generate_2d_asset with task= to reuse an existing image without new generation credits. Choose a new output name because existing files are never overwritten.",
     ],
@@ -67,16 +108,35 @@ export default function (pi: ExtensionAPI) {
       if ((params.action === "generate" || params.action === "fit") && !params.out?.trim())
         throw new Error(`INVALID_ARGS: action=${params.action} needs out=<file>; nothing was written`);
 
+      const generationOut = pathParam(params.out);
+      const generationRefs = (params.refs ?? []).map((file) => resolveUserPath(cwd, file));
+      let generationTask = params.task ?? null;
+      let taskObserved = false;
+      const auditGeneration = (error?: ImageError): string | null => recordGeneration({
+        cwd,
+        out: generationOut!,
+        prompt: params.prompt,
+        refs: generationRefs,
+        background: params.background,
+        reuseTask: params.task,
+        taskId: generationTask,
+        error,
+      });
+
       const run = async () => {
         let result: ImageResult;
         if (params.action === "generate") {
           result = await generateImage({
             prompt: params.prompt,
-            refs: (params.refs ?? []).map((file) => resolveUserPath(cwd, file)),
-            out: pathParam(params.out)!,
+            refs: generationRefs,
+            out: generationOut!,
             background: params.background,
             task: params.task,
             signal,
+            onTask: (id) => {
+              generationTask = id;
+              taskObserved = true;
+            },
           });
         } else if (params.action === "fit") {
           if (!params.in?.trim()) throw new Error("INVALID_ARGS: action=fit needs in=<file>");
@@ -102,15 +162,16 @@ export default function (pi: ExtensionAPI) {
           result = await checkRefs({ dir: pathParam(params.dir)!, expect: params.expect });
         }
 
+        const manifestWarning = params.action === "generate" ? auditGeneration() : null;
         if (result.status === "warn") {
           const missing = result.missing?.length ? `\nNOTE: missing ${result.missing.join(", ")}` : "";
           return {
-            content: [{ type: "text" as const, text: content(`WARN: ${result.warning}${missing}`) }],
+            content: [{ type: "text" as const, text: content(`WARN: ${result.warning}${missing}${warnLine(manifestWarning)}`) }],
             details: { ok: true, action: params.action, result },
           };
         }
         return {
-          content: [{ type: "text" as const, text: content(passText(params.action, result)) }],
+          content: [{ type: "text" as const, text: content(`${passText(params.action, result)}${warnLine(manifestWarning)}`) }],
           details: { ok: true, action: params.action, result },
         };
       };
@@ -119,10 +180,13 @@ export default function (pi: ExtensionAPI) {
         return params.action === "generate" ? await serialize("tripo-image-generation", run) : await run();
       } catch (error) {
         if (!(error instanceof ImageError)) throw error;
+        const manifestWarning = params.action === "generate" && (taskObserved || !CALLER_ERRORS.has(error.code))
+          ? auditGeneration(error)
+          : null;
         if (CALLER_ERRORS.has(error.code)) throw new Error(`${error.code}: ${error.message}${error.next ? `\nNEXT: ${error.next}` : ""}`);
         const next = error.next ?? "fix the named problem, then retry";
         return {
-          content: [{ type: "text" as const, text: content(`FAIL: ${error.code}: ${error.message}\nNEXT: ${next}`) }],
+          content: [{ type: "text" as const, text: content(`FAIL: ${error.code}: ${error.message}\nNEXT: ${next}${warnLine(manifestWarning)}`) }],
           details: { ok: false, action: params.action, reason: error.code },
         };
       }

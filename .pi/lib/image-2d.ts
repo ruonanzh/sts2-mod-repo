@@ -7,7 +7,7 @@ import { cropCover, decodePng, encodePng, letterbox, MAX_IMAGE_PIXELS } from "./
 const API = "https://openapi.tripo3d.com/v3";
 const NET_TIMEOUT_MS = 30_000;
 const DOWNLOAD_TIMEOUT_MS = 120_000;
-const MODEL = "chat_image_2.5_flare";
+export const IMAGE_MODEL = "chat_image_2.5_flare";
 
 export class ImageError extends Error {
   public code: string;
@@ -43,14 +43,18 @@ async function assertNewOutput(out: string): Promise<void> {
   if (existsSync(out)) throw new ImageError("OUT_FILE_EXISTS", `${out} already exists; choose a new file name or remove the old file after checking it`);
 }
 
-async function writeNewImage(out: string, data: Buffer): Promise<void> {
-  await mkdir(path.dirname(path.resolve(out)), { recursive: true });
+async function writeNewImage(out: string, data: Buffer, task?: string): Promise<void> {
   try {
+    await mkdir(path.dirname(path.resolve(out)), { recursive: true });
     await writeFile(out, data, { flag: "wx" });
   } catch (error) {
-    if ((error as NodeJS.ErrnoException).code === "EEXIST")
+    if ((error as NodeJS.ErrnoException).code === "EEXIST" && existsSync(out))
       throw new ImageError("OUT_FILE_EXISTS", `${out} already exists; nothing was overwritten`);
-    throw error;
+    throw new ImageError(
+      "WRITE_FAILED",
+      `cannot write image ${out}: ${(error as Error).message}`,
+      task ? `reuse task=${task} instead of paying for a new image` : "check the output directory permissions and free space",
+    );
   }
 }
 
@@ -226,7 +230,7 @@ async function uploadFile(key: string, file: string, fetchImpl: Fetch, signal?: 
     data = await readFile(file);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") throw new ImageError("NO_FILE", `no such reference picture: ${file}`);
-    throw error;
+    throw new ImageError("READ_FAILED", `cannot read reference image ${file}: ${(error as Error).message}`, "check the reference file permissions and type");
   }
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(data)]), path.basename(file));
@@ -291,6 +295,7 @@ export async function generateImage({
   signal,
   pollMs = 2000,
   timeoutMs = 900_000,
+  onTask,
 }: {
   prompt?: string;
   refs?: string[];
@@ -302,6 +307,7 @@ export async function generateImage({
   signal?: AbortSignal;
   pollMs?: number;
   timeoutMs?: number;
+  onTask?: (taskId: string) => void;
 }): Promise<ImageResult> {
   if (!out) throw new ImageError("NO_OUT", "generate needs out");
   if (!task && !prompt?.trim()) throw new ImageError("NO_PROMPT", "generate needs prompt, or task to reuse an existing image");
@@ -309,6 +315,7 @@ export async function generateImage({
   const apiKey = key || await requireKey();
   const api = tripoApi(apiKey, fetchImpl, signal);
   let requestId = task ?? null;
+  if (requestId) onTask?.(requestId);
   let imageUrl: string | null;
   if (task) {
     const done = await waitForTask(api, task, pollMs, timeoutMs, signal);
@@ -316,13 +323,14 @@ export async function generateImage({
   } else {
     const tokens: string[] = [];
     for (const file of refs) tokens.push(await uploadFile(apiKey, file, fetchImpl, signal));
-    const body: Record<string, unknown> = { prompt, model: MODEL, background, output_format: "png" };
+    const body: Record<string, unknown> = { prompt, model: IMAGE_MODEL, background, output_format: "png" };
     if (tokens.length === 1) body.input = tokens[0];
     if (tokens.length > 1) body.inputs = tokens;
     const endpoint = tokens.length ? "/generation/image-to-image" : "/generation/text-to-image";
     const created = await api(endpoint, body);
     requestId = String(created?.task_id ?? "");
     if (!requestId) throw new ImageError("TASK_FAILED", `Tripo accepted no task: ${JSON.stringify(created).slice(0, 200)}`, "retry after checking the API response");
+    onTask?.(requestId);
     const done = await waitForTask(api, requestId, pollMs, timeoutMs, signal);
     imageUrl = pickUrl(done?.output);
   }
@@ -337,7 +345,7 @@ export async function generateImage({
     throw new ImageError("BAD_DOWNLOAD", `task ${requestId} did not return a supported PNG: ${(error as Error).message}`, `reuse task=${requestId} or generate a new image`);
   }
   try {
-    await writeNewImage(out, bytes);
+    await writeNewImage(out, bytes, requestId ?? undefined);
   } catch (error) {
     if (error instanceof ImageError && error.code === "OUT_FILE_EXISTS")
       throw new ImageError(error.code, error.message, `reuse task=${requestId} with a new out= path; do not pay for another image`);
