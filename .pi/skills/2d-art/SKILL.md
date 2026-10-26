@@ -14,12 +14,38 @@ description: 'Use when a mod needs a generated, resized, or checked PNG. Covers 
 - The asset type and intended mod.
 - Any composition or background preference.
 
-The player owns the style. Do not add style wording or a house style. Use the tool's fixed model and do not add a model parameter.
+The player owns the style. When the player has not chosen a style, use the matching default hint below. The agent may adjust or omit the default to fit the request. Do not combine conflicting style directions. Use the tool's fixed model and do not add a model parameter.
+
+## Default style hints
+
+**Card**
+
+```text
+Bold, angular fantasy card art with thick dark outlines, flat cel-shaded colors, dramatic lighting, and dynamic action in a wide 25:19 composition, with no text or border.
+```
+
+**Potion**
+
+```text
+A single fantasy potion bottle in a clean cartoon style, with a thick dark outline, flat colors, simple glossy highlights, and a transparent background, with no text.
+```
+
+**Relic**
+
+```text
+A single iconic fantasy relic in a clean cartoon style, with a bold silhouette, thick dark outline, flat colors, subtle two-tone shading, and a transparent background, with no text.
+```
+
+**Power**
+
+```text
+A single bold fantasy power symbol in a clean cartoon style, with a thick dark outline, flat high-contrast colors, minimal detail, and a transparent background, with no text.
+```
 
 ## Generate a preview
 
 1. Choose a preview path under `your_mods/<mod>/.preview/`. Use a new file name for each attempt. Existing files are never overwritten.
-2. Use `generate_2d_asset` with `action=generate`.
+2. Build the generation prompt from the player's request. Add the applicable default style hint only when the player gave no style. Use `generate_2d_asset` with `action=generate`.
 3. Use `background=opaque` for default card art and `background=transparent` for icons.
 4. Use only `opaque` or `transparent` for these workflows. Do not pass a color value to generation.
 5. Keep the approved prompt unchanged. Technical constraints about transparency, framing, and completeness are allowed.
