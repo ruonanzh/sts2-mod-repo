@@ -44,6 +44,12 @@ pre-commit:
     example-power:
       # The reference power must keep stacking, application, art, text, and attack-triggered behavior.
       run: node scripts/test-example-power.mjs
+    image-pck:
+      # Generated RGB cards and RGBA icons must preserve their dimensions in PCK.
+      run: bun scripts/test-image-pck.mjs
+    generate-2d-asset:
+      # The pure TypeScript tool must preserve prompts, serialize generation, and never overwrite.
+      run: bun scripts/test-generate-2d-asset.mjs
     example-potion:
       # The reference potion must keep targeted use, packaged art, text, and its Block effect.
       run: node scripts/test-example-potion.mjs
