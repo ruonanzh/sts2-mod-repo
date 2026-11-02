@@ -26,7 +26,7 @@ This repository is the modding environment for Slay the Spire 2. Create player m
 - `docs/INDEX.md`: the map for game, RitsuLib, PCK, decompilation, and failure documents.
 - `.pi/extensions/`: agent tools. Use `generate_2d_asset` for 2D PNG work. Use `validate_mod` before `install_mod`.
 - `.pi/skills/`: role and capability procedures. `add-card` owns the card workflow. `add-relic` owns the relic workflow. `add-power` owns the power workflow. `add-potion` owns the potion workflow. `2d-art` owns image generation, fitting, and image checks. `how-to-speak` owns player-facing replies. `mod-page` owns choices, comparisons, and result pages.
-- `mod-repo.json`: machine-readable constants and the dependency contract.
+- `mod-repo.json`: machine-readable constants and the dependency contract. `additionalTools` lists repository tools available to Game Helper. It does not affect mod-development sessions, and the product allowlist still applies.
 
 ## Rules
 
