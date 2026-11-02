@@ -1,6 +1,7 @@
 {
   "version": 1,
   "modType": "godot-csharp",
+  "additionalTools": ["inspect_game_api"],
   "game": {
     "name": "Slay the Spire 2",
     "steamAppId": "2868840",
