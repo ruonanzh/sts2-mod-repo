@@ -43,7 +43,7 @@ Do not explain the workspace, directory maps, tool lists, or decompilation to th
 
 ## Pages and fallbacks
 
-Use `mod-page` for design choices, comparisons, longer explanations, and finished-mod summaries.
+When you discuss a mod with the player, prefer `mod-page` over a chat list. Put design choices, comparisons, longer explanations, and finished-mod summaries on the page.
 
 A Game Helper session has no bound mod directory. Answer in text there. An installer session without a writable bound mod directory also summarizes in text.
 

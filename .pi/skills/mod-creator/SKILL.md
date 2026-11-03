@@ -30,6 +30,8 @@ When a mod needs generated or resized art, use `2d-art` for previews, fitting, a
 
 Do not invent a supported capability from a template name alone.
 
+When you discuss a mod with the player, prefer `mod-page` over a chat list. This covers options, comparisons, values, and finished-mod summaries. If no mod directory is bound, call `create_mod_folder` first.
+
 ## 3. Read the capability procedure
 
 For a card, stop here and complete `.pi/skills/add-card/SKILL.md`.
@@ -43,8 +45,6 @@ For a potion, stop here and complete `.pi/skills/add-potion/SKILL.md`.
 For a combined mod, apply each capability to its item in the same mod directory. Skip individual validation and installation. Validate once after all items, then install once.
 
 The remaining steps are for other mods.
-
-For a non-card mod, use `mod-page` before implementation when the player must choose a scope, values, or between options.
 
 Read `docs/ritsulib.md` for framework rules and `docs/pck.md` for packaged resources.
 
