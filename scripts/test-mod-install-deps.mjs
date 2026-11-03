@@ -314,6 +314,31 @@ const vendorPlaced = (modsRoot) => existsSync(join(modsRoot, "BaseLib", "BaseLib
   check('"v3.4.7" satisfies min_version "3.4.7"', !/older than the required/.test(text), text);
 }
 
+// ⑥ 安装记录只写目录名（跨仓契约），并兼容旧记录里的绝对路径
+//
+// 产品面板（pi-desktop src/main/workspace-status.ts）用 `join(modInstallDir, installedDir)`
+// 判「装没装」。记录里写成绝对路径时，这条 join 会把路径接两遍，玩家看到「未安装」。
+// 本仓在 2026-11-03 之前就是这么写的，所以这里同时钉住「新记录是目录名」和「旧记录仍能就地更新」。
+{
+  const { modsRoot } = setup();
+  const { details } = await runInstall();
+  const recordPath = join(caseRoot, "MyMod", ".pi-mod.json");
+  const record = JSON.parse(readFileSync(recordPath, "utf8"));
+  check(
+    "the install record holds a directory name, not a path",
+    record.installedDir === "MyMod",
+    JSON.stringify(record),
+  );
+  check("...and it contains no path separator", !/[\\/]/.test(record.installedDir), JSON.stringify(record));
+  check("...and the tool details name the same directory", details.installedDir === "MyMod", JSON.stringify(details));
+
+  // 旧记录：绝对路径。必须命中原地更新，而不是因为「记录指向不存在」改建 MyMod_pimod。
+  writeFileSync(recordPath, JSON.stringify({ name: "MyMod", installedDir: details.installedPath }));
+  const again = await runInstall();
+  check("a legacy absolute record still updates in place", again.details.installedDir === "MyMod", again.text);
+  check("...and leaves no <dir>_pimod behind", !existsSync(join(modsRoot, "MyMod_pimod")), again.text);
+}
+
 rmSync(tmp, { recursive: true, force: true });
 
 const failed = results.filter((r) => !r.ok);

@@ -10,7 +10,7 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { basename, join, resolve } from "node:path";
+import { basename, isAbsolute, join, resolve } from "node:path";
 import { modInstallDirFor, pathsFromGameDir, readModRepoConfig, readState } from "../lib/game-paths";
 import { readManifest } from "../lib/mod-identity";
 import { readModLoadingState } from "../lib/game-settings";
@@ -39,6 +39,13 @@ import {
  *
  * Ownership and idempotence use a workspace-side record at <modDir>/.pi-mod.json
  * ({ name, installedDir }). Nothing of ours is written into the game directory.
+ *
+ * `installedDir` is a **directory name**, never a path. The product reads this record to
+ * answer "is this mod installed" by joining `modInstallDir` with it (pi-desktop
+ * `src/main/workspace-status.ts`), and the Duckov repository writes the same shape. An
+ * absolute path here silently reports "not installed": `join(mods, "<abs path>")` doubles
+ * the path. The reader still accepts a legacy absolute path, because this repository wrote
+ * one before 2026-11-03.
  *
  * Conflict rule (docs/mod-repo-guide.md 4.1): if the target directory exists and is not
  * the one we recorded, another mod owns it. Install as <dir>_pimod instead of overwriting.
@@ -70,7 +77,12 @@ function writeRecord(modDir: string, record: InstallRecord): void {
  * Preference: the recorded one (in-place update), then <modDirName>, then <modDirName>_pimod<N>.
  */
 function chooseTarget(modRoot: string, dirName: string, record: InstallRecord | null): string {
-  if (record && existsSync(record.installedDir)) return record.installedDir;
+  // The record holds a directory name. A legacy record holds an absolute path; keep both
+  // readable so an existing install updates in place instead of landing in <dir>_pimod.
+  if (record) {
+    const recorded = isAbsolute(record.installedDir) ? record.installedDir : join(modRoot, record.installedDir);
+    if (existsSync(recorded)) return recorded;
+  }
   const base = join(modRoot, dirName);
   if (!existsSync(base)) return base;
   for (let n = 1; n < 100; n++) {
@@ -484,7 +496,7 @@ export default function (pi: ExtensionAPI) {
         };
       }
 
-      writeRecord(modDir, { name: id, installedDir: target });
+      writeRecord(modDir, { name: id, installedDir: basename(target) });
 
       const lines: string[] = [];
       lines.push(`PASS: installed ${id} into ${target}`);
@@ -560,7 +572,8 @@ export default function (pi: ExtensionAPI) {
         details: {
           ok: true,
           modId: id,
-          installedDir: target,
+          installedDir: basename(target),
+          installedPath: target,
           renamed,
           modsEnabled: loading.modsEnabled,
           settingsPath: loading.settingsPath,
